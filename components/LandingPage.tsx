@@ -1,4 +1,8 @@
+"use client";
+
+import Image from "next/image";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 
 const C = {
   bg: "#0A0F1F",
@@ -16,6 +20,17 @@ const C = {
 } as const;
 
 export default function LandingPage() {
+  const [heroImageExists, setHeroImageExists] = useState(false);
+
+  useEffect(() => {
+    fetch("/hero.jpg", { method: "HEAD" })
+      .then((res) => {
+        if (res.ok) setHeroImageExists(true);
+      })
+      .catch(() => {
+        setHeroImageExists(false);
+      });
+  }, []);
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Noto Sans JP', sans-serif", display: "flex", flexDirection: "column" }}>
 
@@ -28,7 +43,6 @@ export default function LandingPage() {
           <nav style={{ display: "flex", gap: 28, fontSize: 13.5, fontWeight: 700, color: C.sub }}>
             <a href="#features" style={{ color: C.sub, textDecoration: "none" }}>特徴</a>
             <a href="#how" style={{ color: C.sub, textDecoration: "none" }}>使い方</a>
-            <a href="#pricing" style={{ color: C.sub, textDecoration: "none" }}>料金</a>
             <a href="#faq" style={{ color: C.sub, textDecoration: "none" }}>FAQ</a>
           </nav>
         </div>
@@ -74,68 +88,79 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* Hero CTA card */}
-        <div style={{
-          position: "relative",
-          background: "linear-gradient(145deg, #111728 0%, #1a2645 60%, #0d1830 100%)",
-          border: `1px solid ${C.border2}`,
-          borderRadius: 20,
-          padding: "52px 48px",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          textAlign: "center",
-          overflow: "hidden",
-        }}>
-          {/* Glow */}
-          <div style={{ position: "absolute", inset: 0, background: "radial-gradient(circle at 50% 38%, rgba(77,91,255,0.22) 0%, transparent 65%)", pointerEvents: "none" }} />
-
-          {/* β badge */}
+        {heroImageExists ? (
+          <div style={{ position: "relative", width: "100%", minHeight: 520, overflow: "hidden", borderRadius: 20, border: `1px solid ${C.border2}` }}>
+            <Image
+              src="/hero.jpg"
+              alt="Hero image"
+              fill
+              style={{ objectFit: "cover" }}
+              sizes="(max-width: 1200px) 100vw, 600px"
+            />
+          </div>
+        ) : (
           <div style={{
             position: "relative",
-            display: "inline-flex", alignItems: "center", gap: 8,
-            background: "rgba(77,91,255,0.13)",
-            border: `1px solid rgba(77,91,255,0.35)`,
-            borderRadius: 20, padding: "8px 18px",
-            marginBottom: 32,
-          }}>
-            <div style={{ width: 7, height: 7, borderRadius: "50%", background: C.accent }} />
-            <span style={{ fontFamily: "'Roboto Mono', monospace", fontSize: 12, fontWeight: 700, color: C.accent, letterSpacing: 1.5 }}>
-              β版登録受付中
-            </span>
-          </div>
-
-          {/* Sub copy */}
-          <div style={{ position: "relative", fontSize: 24, fontWeight: 900, lineHeight: 1.5, marginBottom: 14 }}>
-            渉外担当の相手探しを<br />もっとかんたんに
-          </div>
-          <div style={{ position: "relative", fontSize: 14, color: C.muted, lineHeight: 1.9, marginBottom: 40, maxWidth: 340 }}>
-            チームを登録して空き日程を公開するだけ。<br />
-            条件の合う相手からすぐにマッチ申請が届きます。
-          </div>
-
-          {/* CTA button */}
-          <Link href="/register" style={{
-            position: "relative",
-            display: "block",
-            width: "100%",
-            background: C.accent,
-            color: "#fff",
-            fontSize: 17,
-            fontWeight: 900,
-            padding: "20px",
-            borderRadius: 14,
-            textDecoration: "none",
+            background: "linear-gradient(145deg, #111728 0%, #1a2645 60%, #0d1830 100%)",
+            border: `1px solid ${C.border2}`,
+            borderRadius: 20,
+            padding: "52px 48px",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
             textAlign: "center",
-            boxShadow: "0 16px 44px rgba(77,91,255,.42)",
-            letterSpacing: 0.3,
+            overflow: "hidden",
           }}>
-            無料ではじめる →
-          </Link>
-          <div style={{ position: "relative", fontSize: 12, color: "#5A647F", marginTop: 16 }}>
-            クレジットカード不要 · いつでも退会可能
+            {/* Glow */}
+            <div style={{ position: "absolute", inset: 0, background: "radial-gradient(circle at 50% 38%, rgba(77,91,255,0.22) 0%, transparent 65%)", pointerEvents: "none" }} />
+
+            {/* β badge */}
+            <div style={{
+              position: "relative",
+              display: "inline-flex", alignItems: "center", gap: 8,
+              background: "rgba(77,91,255,0.13)",
+              border: `1px solid rgba(77,91,255,0.35)`,
+              borderRadius: 20, padding: "8px 18px",
+              marginBottom: 32,
+            }}>
+              <div style={{ width: 7, height: 7, borderRadius: "50%", background: C.accent }} />
+              <span style={{ fontFamily: "'Roboto Mono', monospace", fontSize: 12, fontWeight: 700, color: C.accent, letterSpacing: 1.5 }}>
+                β版登録受付中
+              </span>
+            </div>
+
+            {/* Sub copy */}
+            <div style={{ position: "relative", fontSize: 24, fontWeight: 900, lineHeight: 1.5, marginBottom: 14 }}>
+              渉外担当の相手探しを<br />もっとかんたんに
+            </div>
+            <div style={{ position: "relative", fontSize: 14, color: C.muted, lineHeight: 1.9, marginBottom: 40, maxWidth: 340 }}>
+              チームを登録して空き日程を公開するだけ。<br />
+              条件の合う相手からすぐにマッチ申請が届きます。
+            </div>
+
+            {/* CTA button */}
+            <Link href="/register" style={{
+              position: "relative",
+              display: "block",
+              width: "100%",
+              background: C.accent,
+              color: "#fff",
+              fontSize: 17,
+              fontWeight: 900,
+              padding: "20px",
+              borderRadius: 14,
+              textDecoration: "none",
+              textAlign: "center",
+              boxShadow: "0 16px 44px rgba(77,91,255,.42)",
+              letterSpacing: 0.3,
+            }}>
+              無料ではじめる →
+            </Link>
+            <div style={{ position: "relative", fontSize: 12, color: "#5A647F", marginTop: 16 }}>
+              クレジットカード不要 · いつでも退会可能
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* ── Features ── */}
