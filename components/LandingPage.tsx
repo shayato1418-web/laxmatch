@@ -72,76 +72,68 @@ export default function LandingPage() {
               使い方を見る
             </a>
           </div>
-          <div style={{ display: "flex", gap: 36, marginTop: 38, alignItems: "center" }}>
-            <div>
-              <div style={{ fontFamily: "'Archivo', sans-serif", fontWeight: 900, fontSize: 34, letterSpacing: -1 }}>
-                96<span style={{ fontSize: 18, color: C.accent }}>チーム</span>
-              </div>
-              <div style={{ fontFamily: "'Roboto Mono', monospace", fontSize: 10, letterSpacing: 1, color: C.muted, marginTop: 2 }}>加盟チーム</div>
-            </div>
-            <div style={{ width: 1, alignSelf: "stretch", background: C.border2 }} />
-            <div>
-              <div style={{ fontFamily: "'Archivo', sans-serif", fontWeight: 900, fontSize: 34, letterSpacing: -1 }}>
-                1,240<span style={{ fontSize: 18, color: C.accent }}>+</span>
-              </div>
-              <div style={{ fontFamily: "'Roboto Mono', monospace", fontSize: 10, letterSpacing: 1, color: C.muted, marginTop: 2 }}>累計マッチ成立</div>
-            </div>
-          </div>
         </div>
 
-        {/* Hero visual */}
+        {/* Hero CTA card */}
         <div style={{
-          position: "relative", height: 480, borderRadius: 20, overflow: "hidden",
+          position: "relative",
+          background: "linear-gradient(145deg, #111728 0%, #1a2645 60%, #0d1830 100%)",
           border: `1px solid ${C.border2}`,
-          background: "linear-gradient(135deg, #111728 0%, #1a2645 40%, #0d1830 100%)",
+          borderRadius: 20,
+          padding: "52px 48px",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          textAlign: "center",
+          overflow: "hidden",
         }}>
-          <div style={{
-            position: "absolute", inset: 0,
-            background: "radial-gradient(circle at 35% 65%, rgba(77,91,255,0.18) 0%, transparent 55%), radial-gradient(circle at 75% 25%, rgba(37,208,125,0.10) 0%, transparent 45%)",
-          }} />
+          {/* Glow */}
+          <div style={{ position: "absolute", inset: 0, background: "radial-gradient(circle at 50% 38%, rgba(77,91,255,0.22) 0%, transparent 65%)", pointerEvents: "none" }} />
 
-          {/* Live pill */}
+          {/* β badge */}
           <div style={{
-            position: "absolute", left: 22, top: 22,
-            display: "flex", alignItems: "center", gap: 8,
-            background: "rgba(10,15,31,.7)", backdropFilter: "blur(6px)",
-            border: "1px solid #2C3658", borderRadius: 20, padding: "7px 14px",
+            position: "relative",
+            display: "inline-flex", alignItems: "center", gap: 8,
+            background: "rgba(77,91,255,0.13)",
+            border: `1px solid rgba(77,91,255,0.35)`,
+            borderRadius: 20, padding: "8px 18px",
+            marginBottom: 32,
           }}>
-            <div style={{ width: 7, height: 7, borderRadius: "50%", background: C.green }} />
-            <span style={{ fontFamily: "'Roboto Mono', monospace", fontSize: 11, fontWeight: 700 }}>
-              LIVE · 12チームが募集中
+            <div style={{ width: 7, height: 7, borderRadius: "50%", background: C.accent }} />
+            <span style={{ fontFamily: "'Roboto Mono', monospace", fontSize: 12, fontWeight: 700, color: C.accent, letterSpacing: 1.5 }}>
+              β版登録受付中
             </span>
           </div>
 
-          {/* Match success card */}
-          <div style={{
-            position: "absolute", right: 22, bottom: 22,
-            background: "#0B1120", border: "1px solid #2C3658",
-            borderRadius: 14, padding: "14px 18px", width: 230,
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontFamily: "'Roboto Mono', monospace", fontSize: 9, letterSpacing: 1, color: C.green, fontWeight: 700 }}>
-                MATCH 成立
-              </span>
-              <span style={{ fontFamily: "'Roboto Mono', monospace", fontSize: 9, color: C.muted }}>3分前</span>
-            </div>
-            <div style={{ fontSize: 14, fontWeight: 900, marginTop: 7 }}>慶應義塾大学 戦</div>
-            <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>6/29 (日) 13:00 · 日吉G</div>
+          {/* Sub copy */}
+          <div style={{ position: "relative", fontSize: 24, fontWeight: 900, lineHeight: 1.5, marginBottom: 14 }}>
+            渉外担当の相手探しを<br />もっとかんたんに
+          </div>
+          <div style={{ position: "relative", fontSize: 14, color: C.muted, lineHeight: 1.9, marginBottom: 40, maxWidth: 340 }}>
+            チームを登録して空き日程を公開するだけ。<br />
+            条件の合う相手からすぐにマッチ申請が届きます。
           </div>
 
-          {/* Center lacrosse icon */}
-          <div style={{
-            position: "absolute", top: "50%", left: "50%",
-            transform: "translate(-50%, -50%)",
-            width: 120, height: 120,
-            border: `2px solid rgba(77,91,255,0.3)`,
-            borderRadius: "50%",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            background: "rgba(77,91,255,0.06)",
+          {/* CTA button */}
+          <Link href="/register" style={{
+            position: "relative",
+            display: "block",
+            width: "100%",
+            background: C.accent,
+            color: "#fff",
+            fontSize: 17,
+            fontWeight: 900,
+            padding: "20px",
+            borderRadius: 14,
+            textDecoration: "none",
+            textAlign: "center",
+            boxShadow: "0 16px 44px rgba(77,91,255,.42)",
+            letterSpacing: 0.3,
           }}>
-            <span style={{ fontFamily: "'Archivo', sans-serif", fontWeight: 900, fontSize: 32, color: "rgba(77,91,255,0.6)" }}>
-              LM
-            </span>
+            無料ではじめる →
+          </Link>
+          <div style={{ position: "relative", fontSize: 12, color: "#5A647F", marginTop: 16 }}>
+            クレジットカード不要 · いつでも退会可能
           </div>
         </div>
       </div>
