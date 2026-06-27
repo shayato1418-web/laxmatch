@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Sidebar from "@/components/Sidebar";
+import MobileBottomNav from "@/components/MobileBottomNav";
 
 const C = {
   bg: "#0A0F1F",
@@ -40,6 +41,7 @@ export default function ChatPage() {
   const [convs, setConvs] = useState<Conv[]>(INIT_CONVS);
   const [activeIdx, setActiveIdx] = useState(0);
   const [draft, setDraft] = useState("");
+  const [mobileView, setMobileView] = useState<"list" | "chat">("list");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const active = convs.length > 0 ? convs[activeIdx] : null;
@@ -68,7 +70,7 @@ export default function ChatPage() {
   return (
     <div style={{ height: "100vh", display: "flex", background: C.bg, overflow: "hidden" }}>
       {/* Chrome bar */}
-      <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: 42, background: C.header, borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", padding: "0 16px", gap: 10, zIndex: 50 }}>
+      <div className="chrome-bar" style={{ position: "fixed", top: 0, left: 0, right: 0, height: 42, background: C.header, borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", padding: "0 16px", gap: 10, zIndex: 50 }}>
         <div style={{ display: "flex", gap: 7 }}>
           {["#FF5F57","#FEBC2E","#28C840"].map((co) => (
             <div key={co} style={{ width: 11, height: 11, borderRadius: "50%", background: co }} />
@@ -82,11 +84,11 @@ export default function ChatPage() {
         <div style={{ width: 54 }} />
       </div>
 
-      <div style={{ display: "flex", flex: 1, paddingTop: 42, overflow: "hidden" }}>
+      <div className="app-body" style={{ display: "flex", flex: 1, paddingTop: 42, overflow: "hidden" }}>
         <Sidebar active="/chat" />
 
         {/* Conversation list */}
-        <div style={{ width: 300, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column", flexShrink: 0 }}>
+        <div className={`chat-conv-panel${mobileView === "chat" ? " chat-hidden-mobile" : ""}`} style={{ width: 300, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column", flexShrink: 0 }}>
           <div style={{ padding: "18px 20px", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
             <div style={{ fontSize: 16, fontWeight: 900 }}>メッセージ</div>
             <div style={{ marginTop: 12, background: C.inputBg, border: `1px solid ${C.border2}`, borderRadius: 10, padding: "9px 13px", fontSize: 12.5, color: "#7A85A6" }}>
@@ -102,7 +104,7 @@ export default function ChatPage() {
               convs.map((c, i) => (
                 <button
                   key={c.uni}
-                  onClick={() => setActiveIdx(i)}
+                  onClick={() => { setActiveIdx(i); setMobileView("chat"); }}
                   style={{
                     width: "100%", display: "flex", gap: 12, padding: "15px 18px",
                     borderBottom: `1px solid #141B2E`, cursor: "pointer", alignItems: "center",
@@ -141,7 +143,7 @@ export default function ChatPage() {
         </div>
 
         {/* Chat area */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div className={mobileView === "list" ? "chat-hidden-mobile" : ""} style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {!active ? (
             <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, color: C.muted }}>
               <div style={{ fontSize: 44 }}>💬</div>
@@ -154,6 +156,13 @@ export default function ChatPage() {
             <>
               {/* Chat header */}
               <div style={{ display: "flex", alignItems: "center", gap: 13, padding: "15px 24px", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+                <button
+                  className="chat-back-btn"
+                  onClick={() => setMobileView("list")}
+                  style={{ background: "none", border: "none", color: "#7E92FF", fontSize: 22, cursor: "pointer", padding: "0 4px 0 0", alignItems: "center", flexShrink: 0 }}
+                >
+                  ‹
+                </button>
                 <div style={{ width: 42, height: 42, borderRadius: 12, background: active.hue, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Archivo', sans-serif", fontWeight: 900, fontSize: 12, color: "#fff", flexShrink: 0 }}>
                   {active.en}
                 </div>
@@ -187,7 +196,7 @@ export default function ChatPage() {
               ) : (
                 <>
                   {/* Messages */}
-                  <div style={{ flex: 1, overflowY: "auto", padding: "22px 28px", display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div className="app-scroll" style={{ flex: 1, overflowY: "auto", padding: "22px 28px", display: "flex", flexDirection: "column", gap: 8 }}>
                     {active.messages.map((msg, i) => {
                       const isMe = msg.from === "me";
                       return (
@@ -249,6 +258,7 @@ export default function ChatPage() {
           )}
         </div>
       </div>
+      <MobileBottomNav />
     </div>
   );
 }

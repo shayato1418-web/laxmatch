@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import Sidebar from "@/components/Sidebar";
+import MobileBottomNav from "@/components/MobileBottomNav";
 
 const C = {
   bg: "#0A0F1F",
@@ -68,7 +69,7 @@ export default function AvailabilityPage() {
   return (
     <div style={{ height: "100vh", display: "flex", background: C.bg, overflow: "hidden" }}>
       {/* Chrome bar */}
-      <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: 42, background: C.header, borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", padding: "0 16px", gap: 10, zIndex: 50 }}>
+      <div className="chrome-bar" style={{ position: "fixed", top: 0, left: 0, right: 0, height: 42, background: C.header, borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", padding: "0 16px", gap: 10, zIndex: 50 }}>
         <div style={{ display: "flex", gap: 7 }}>
           {["#FF5F57","#FEBC2E","#28C840"].map((c) => (
             <div key={c} style={{ width: 11, height: 11, borderRadius: "50%", background: c }} />
@@ -82,12 +83,12 @@ export default function AvailabilityPage() {
         <div style={{ width: 54 }} />
       </div>
 
-      <div style={{ display: "flex", flex: 1, paddingTop: 42, overflow: "hidden" }}>
+      <div className="app-body" style={{ display: "flex", flex: 1, paddingTop: 42, overflow: "hidden" }}>
         <Sidebar active="/availability" />
 
         <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {/* Header */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 24px", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+          <div className="avail-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 24px", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
             <div>
               <div style={{ fontFamily: "'Roboto Mono', monospace", fontSize: 10, letterSpacing: 2, color: C.accent, fontWeight: 700 }}>AVAILABILITY</div>
               <div style={{ fontSize: 20, fontWeight: 900, marginTop: 3 }}>空き日程を登録</div>
@@ -116,11 +117,11 @@ export default function AvailabilityPage() {
                 <span style={{ fontSize: 12, color: C.muted }}>{l.label}</span>
               </div>
             ))}
-            <span style={{ marginLeft: "auto", fontSize: 11, color: "#5A647F" }}>タップで 未設定 → 空き → 予定あり → 未設定</span>
+            <span className="avail-hint" style={{ marginLeft: "auto", fontSize: 11, color: "#5A647F" }}>タップで 未設定 → 空き → 予定あり → 未設定</span>
           </div>
 
           {/* Calendar grid */}
-          <div style={{ flex: 1, overflowY: "auto", overflowX: "auto" }}>
+          <div className="app-scroll" style={{ flex: 1, overflowY: "auto", overflowX: "auto" }}>
             <div style={{ minWidth: 560, padding: "0 24px 24px" }}>
               {/* Sticky day header */}
               <div style={{
@@ -191,6 +192,7 @@ export default function AvailabilityPage() {
           </div>
         </main>
       </div>
+      <MobileBottomNav />
     </div>
   );
 }

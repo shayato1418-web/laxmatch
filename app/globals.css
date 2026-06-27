@@ -22,6 +22,115 @@ button, input, textarea, select { font: inherit; }
 
 ::selection { background: rgba(77, 91, 255, 0.35); color: #f8fafc; }
 
+/* ── App mobile bottom navigation ───────────────────────────────────────── */
+
+.mobile-bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: #0B1120;
+  border-top: 1px solid #1A2138;
+  z-index: 100;
+}
+
+.mobile-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  position: relative;
+}
+
+.mobile-tab-indicator {
+  position: absolute;
+  top: 0;
+  width: 26px;
+  height: 3px;
+  background: linear-gradient(120deg, #4D5BFF, #3FC7FF);
+  border-radius: 0 0 3px 3px;
+}
+
+.mobile-tab-label {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+.chat-back-btn { display: none; }
+
+/* ── App pages ≤768px ────────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .mobile-bottom-nav { display: flex !important; }
+  .chrome-bar { display: none !important; }
+  .app-sidebar { display: none !important; }
+
+  .app-body {
+    padding-top: 0 !important;
+    overflow: hidden !important;
+  }
+
+  /* Add bottom padding to inner scrollable areas so content isn't hidden behind nav */
+  .app-scroll { padding-bottom: 72px !important; }
+
+  /* Login */
+  .login-body {
+    grid-template-columns: 1fr !important;
+    overflow: visible !important;
+  }
+  .login-left { display: none !important; }
+  .login-right {
+    padding: 48px 28px 56px !important;
+    justify-content: flex-start !important;
+    overflow-y: auto !important;
+  }
+  .login-mobile-logo { display: block !important; }
+
+  /* Explore */
+  .explore-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+    padding: 16px 18px !important;
+  }
+  .explore-header input { width: 100% !important; }
+  .explore-grid { grid-template-columns: 1fr !important; }
+
+  /* Availability */
+  .avail-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+    padding: 14px 16px !important;
+  }
+  .avail-hint { display: none !important; }
+
+  /* Matches */
+  .matches-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+    padding: 18px 18px 12px !important;
+  }
+  .matches-tabs { flex-wrap: wrap !important; }
+  .matches-grid { grid-template-columns: 1fr !important; }
+
+  /* Chat */
+  .chat-conv-panel {
+    width: 100% !important;
+    border-right: none !important;
+  }
+  .chat-hidden-mobile { display: none !important; }
+  .chat-back-btn { display: flex !important; }
+}
+
 /* ── Landing page ────────────────────────────────────────────────────────── */
 
 .lp {

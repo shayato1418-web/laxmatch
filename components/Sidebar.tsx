@@ -72,7 +72,7 @@ export default function Sidebar({ active }: { active: string }) {
 
   return (
     <>
-      <aside style={{
+      <aside className="app-sidebar" style={{
         width: 236,
         minWidth: 236,
         background: S.bg,

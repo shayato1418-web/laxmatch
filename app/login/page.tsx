@@ -53,7 +53,7 @@ export default function LoginPage() {
   return (
     <div style={{ minHeight: "100vh", background: C.bg, display: "flex", flexDirection: "column" }}>
       {/* Chrome bar */}
-      <div style={{ height: 42, background: C.panel, borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", padding: "0 16px", gap: 10, flexShrink: 0 }}>
+      <div className="chrome-bar" style={{ height: 42, background: C.panel, borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", padding: "0 16px", gap: 10, flexShrink: 0 }}>
         <div style={{ display: "flex", gap: 7 }}>
           {["#FF5F57","#FEBC2E","#28C840"].map((c) => (
             <div key={c} style={{ width: 11, height: 11, borderRadius: "50%", background: c }} />
@@ -68,10 +68,10 @@ export default function LoginPage() {
       </div>
 
       {/* Body */}
-      <div style={{ flex: 1, display: "grid", gridTemplateColumns: "1.1fr 1fr", overflow: "hidden" }}>
+      <div className="login-body" style={{ flex: 1, display: "grid", gridTemplateColumns: "1.1fr 1fr", overflow: "hidden" }}>
 
         {/* Left panel — visual */}
-        <div style={{
+        <div className="login-left" style={{
           position: "relative",
           background: "linear-gradient(135deg, #0d1830 0%, #1a2645 50%, #0a1220 100%)",
           display: "flex",
@@ -95,7 +95,10 @@ export default function LoginPage() {
         </div>
 
         {/* Right panel — form */}
-        <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", padding: "0 80px" }}>
+        <div className="login-right" style={{ display: "flex", flexDirection: "column", justifyContent: "center", padding: "0 80px" }}>
+          <div className="login-mobile-logo" style={{ display: "none", fontFamily: "'Archivo', sans-serif", fontWeight: 900, fontSize: 22, letterSpacing: 0.5, marginBottom: 32 }}>
+            LAX<span style={{ color: C.accent }}>·</span>MATCH
+          </div>
           <div style={{ fontFamily: "'Roboto Mono', monospace", fontSize: 11, letterSpacing: 3, color: C.accent, fontWeight: 700 }}>WELCOME BACK</div>
           <div style={{ fontSize: 30, fontWeight: 900, marginTop: 10 }}>ログイン</div>
           <div style={{ fontSize: 13.5, color: C.muted, marginTop: 8 }}>渉外アカウントでサインインしてください</div>

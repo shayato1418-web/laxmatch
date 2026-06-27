@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
+import MobileBottomNav from "@/components/MobileBottomNav";
 import { useAuth } from "@/app/context/AuthContext";
 
 const C = {
@@ -137,7 +138,7 @@ export default function SettingsPage() {
   return (
     <div style={{ height: "100vh", display: "flex", background: C.bg, overflow: "hidden" }}>
       {/* Chrome bar */}
-      <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: 42, background: C.header, borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", padding: "0 16px", gap: 10, zIndex: 50 }}>
+      <div className="chrome-bar" style={{ position: "fixed", top: 0, left: 0, right: 0, height: 42, background: C.header, borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", padding: "0 16px", gap: 10, zIndex: 50 }}>
         <div style={{ display: "flex", gap: 7 }}>
           {["#FF5F57","#FEBC2E","#28C840"].map((co) => (
             <div key={co} style={{ width: 11, height: 11, borderRadius: "50%", background: co }} />
@@ -151,10 +152,10 @@ export default function SettingsPage() {
         <div style={{ width: 54 }} />
       </div>
 
-      <div style={{ display: "flex", flex: 1, paddingTop: 42, overflow: "hidden" }}>
+      <div className="app-body" style={{ display: "flex", flex: 1, paddingTop: 42, overflow: "hidden" }}>
         <Sidebar active="/settings" />
 
-        <main style={{ flex: 1, overflowY: "auto", padding: "36px 48px" }}>
+        <main className="app-scroll" style={{ flex: 1, overflowY: "auto", padding: "36px 48px" }}>
           <div style={{ fontFamily: "'Roboto Mono', monospace", fontSize: 11, letterSpacing: 3, color: C.accent, fontWeight: 700 }}>SETTINGS</div>
           <div style={{ fontSize: 26, fontWeight: 900, marginTop: 8, marginBottom: 32 }}>設定</div>
 
@@ -283,6 +284,7 @@ export default function SettingsPage() {
           )}
         </main>
       </div>
+      <MobileBottomNav />
     </div>
   );
 }
