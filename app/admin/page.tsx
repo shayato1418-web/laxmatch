@@ -83,84 +83,6 @@ interface Report {
   resolved: boolean;
 }
 
-// ─── Mock data ────────────────────────────────────────────────────────────────
-const SAMPLE_USERS: AdminUser[] = [
-  { id: "s1", name: "慶應義塾大学", email: "shogai@keio.jp",    password: "keio2024",  role: "university", area: "東京",  registeredAt: "2026/05/10", lastLogin: "2026/06/25", status: "active",    flagged: false },
-  { id: "s2", name: "早稲田大学",   email: "shogai@waseda.jp",  password: "wsd2024",   role: "university", area: "東京",  registeredAt: "2026/05/12", lastLogin: "2026/06/24", status: "active",    flagged: false },
-  { id: "s3", name: "立教大学",     email: "shogai@rikkyo.jp",  password: "rikkyo24",  role: "university", area: "埼玉",  registeredAt: "2026/05/18", lastLogin: "2026/06/23", status: "active",    flagged: false },
-  { id: "s4", name: "中央大学",     email: "shogai@chuo.jp",    password: "chuo2024",  role: "university", area: "東京",  registeredAt: "2026/05/20", lastLogin: "2026/06/22", status: "suspended", flagged: true  },
-  { id: "s5", name: "明治大学",     email: "shogai@meiji.jp",   password: "meiji24",   role: "university", area: "東京",  registeredAt: "2026/05/25", lastLogin: "2026/06/21", status: "active",    flagged: false },
-  { id: "s6", name: "田中太郎",     email: "tanaka@gmail.com",  password: "taro1234",  role: "individual", area: "神奈川", registeredAt: "2026/06/01", lastLogin: "2026/06/20", status: "active",   flagged: false },
-];
-
-const SAMPLE_MATCHES: Match[] = [
-  { id: "m1", teamA: "慶應義塾大学", teamB: "早稲田大学", date: "2026/06/29", venue: "日吉グラウンド", status: "confirmed",   createdAt: "2026/06/20" },
-  { id: "m2", teamA: "立教大学",     teamB: "中央大学",   date: "2026/07/06", venue: "未定",          status: "negotiating", createdAt: "2026/06/21" },
-  { id: "m3", teamA: "明治大学",     teamB: "法政大学",   date: "2026/07/13", venue: "明治G",         status: "confirmed",   createdAt: "2026/06/18" },
-  { id: "m4", teamA: "一橋大学",     teamB: "東工大",     date: "2026/07/05", venue: "—",             status: "cancelled",   createdAt: "2026/06/15" },
-  { id: "m5", teamA: "上智大学",     teamB: "青山学院大学", date: "2026/07/20", venue: "四谷G",       status: "negotiating", createdAt: "2026/06/23" },
-  { id: "m6", teamA: "横浜国立大学", teamB: "神奈川大学", date: "2026/07/27", venue: "未定",          status: "negotiating", createdAt: "2026/06/24" },
-];
-
-const SAMPLE_CHATS: ChatRoom[] = [
-  {
-    id: "c1", teamA: "慶應義塾大学", teamB: "早稲田大学",
-    lastMsg: "当日よろしくお願いします！", lastMsgTime: "13:09", msgCount: 12, flagged: false,
-    messages: [
-      { from: "慶應", text: "6/29の練習試合お願いします！", time: "13:00" },
-      { from: "早稲田", text: "ありがとうございます！よろしくお願いします。", time: "13:02" },
-      { from: "慶應", text: "日吉グラウンドで13時はいかがでしょうか？", time: "13:05" },
-      { from: "早稲田", text: "問題ありません！当日よろしくお願いします！", time: "13:09" },
-    ],
-  },
-  {
-    id: "c2", teamA: "立教大学", teamB: "中央大学",
-    lastMsg: "7/6の会場を確認します", lastMsgTime: "昨日", msgCount: 5, flagged: true,
-    messages: [
-      { from: "立教", text: "7/6はいかがですか？", time: "10:00" },
-      { from: "中央", text: "検討します", time: "10:30" },
-      { from: "中央", text: "【削除済みメッセージ】", time: "11:00", deleted: true },
-      { from: "立教", text: "7/6の会場を確認します", time: "昨日" },
-    ],
-  },
-  {
-    id: "c3", teamA: "明治大学", teamB: "法政大学",
-    lastMsg: "ありがとうございました", lastMsgTime: "6/22", msgCount: 8, flagged: false,
-    messages: [
-      { from: "明治", text: "先日はありがとうございました！", time: "10:00" },
-      { from: "法政", text: "こちらこそありがとうございました！", time: "10:05" },
-    ],
-  },
-];
-
-const INIT_NOTIFICATIONS: Notification[] = [
-  { id: "n1", target: "all",   targetName: "全ユーザー",    message: "システムメンテナンスのお知らせ（6/30 2:00〜4:00）",   sentAt: "2026/06/20 09:00" },
-  { id: "n2", target: "s1",    targetName: "慶應義塾大学",  message: "マッチングが成立しました。チャットをご確認ください。", sentAt: "2026/06/21 14:30" },
-];
-
-const INIT_REPORTS: Report[] = [
-  { id: "r1", reporter: "立教大学",     reported: "中央大学",   reason: "不適切な発言", detail: "チャット内で侮辱的な表現がありました。",     createdAt: "2026/06/22 10:00", resolved: false },
-  { id: "r2", reporter: "上智大学",     reported: "青山学院大学", reason: "無断キャンセル", detail: "前日に連絡なくキャンセルされました。",     createdAt: "2026/06/20 15:00", resolved: true  },
-  { id: "r3", reporter: "横浜国立大学", reported: "神奈川大学", reason: "スパム",         detail: "大量のメッセージが繰り返し送られてきました。", createdAt: "2026/06/23 11:30", resolved: false },
-];
-
-const REGIONAL_STATS = [
-  { label: "関東", value: 42 },
-  { label: "関西", value: 28 },
-  { label: "東海", value: 15 },
-  { label: "九州", value: 9  },
-  { label: "東北", value: 6  },
-  { label: "その他", value: 4 },
-];
-
-const WEEKLY_TREND = [
-  { label: "5/26", value: 8  },
-  { label: "6/2",  value: 12 },
-  { label: "6/9",  value: 15 },
-  { label: "6/16", value: 11 },
-  { label: "6/23", value: 19 },
-  { label: "6/30", value: 7  },
-];
 
 // ─── Helper functions ─────────────────────────────────────────────────────────
 function roleLbl(r: UserRole) {
@@ -737,15 +659,37 @@ function ReportManagement({ reports, setReports }: { reports: Report[]; setRepor
 }
 
 // ─── Section ⑦: Statistics ───────────────────────────────────────────────────
-function Statistics({ users }: { users: AdminUser[] }) {
+function Statistics({ users, matches }: { users: AdminUser[]; matches: Match[] }) {
+  const totalMatch = matches.length;
+  const successMatch = matches.filter((m) => m.status === "confirmed").length;
+  const matchRate = totalMatch > 0 ? Math.round((successMatch / totalMatch) * 100) : 0;
+
+  // 地域別登録数をリアルデータから集計（"未設定"は除外）
+  const areaMap = new Map<string, number>();
+  users.forEach((u) => {
+    const area = u.area && u.area !== "未設定" ? u.area : null;
+    if (area) areaMap.set(area, (areaMap.get(area) || 0) + 1);
+  });
+  const regionalStats = Array.from(areaMap.entries())
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+
   const exportStatsCSV = () => {
-    const rows = [
-      ["地域", "登録数"],
-      ...REGIONAL_STATS.map((d) => [d.label, String(d.value)]),
+    const rows: string[][] = [
+      ["=== アカウント統計 ==="],
+      ["大学チーム", String(users.filter((u) => u.role === "university").length)],
+      ["個人/クラブ", String(users.filter((u) => u.role === "individual").length)],
+      ["合計", String(users.length)],
       [],
-      ["週", "マッチング件数"],
-      ...WEEKLY_TREND.map((d) => [d.label, String(d.value)]),
+      ["=== マッチング統計 ==="],
+      ["総マッチング数", String(totalMatch)],
+      ["成立数", String(successMatch)],
+      ["マッチング成立率", `${matchRate}%`],
     ];
+    if (regionalStats.length > 0) {
+      rows.push([], ["=== 地域別登録数 ==="], ["地域", "登録数"]);
+      regionalStats.forEach((d) => rows.push([d.label, String(d.value)]));
+    }
     const csv = rows.map((r) => r.join(",")).join("\n");
     const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -756,9 +700,11 @@ function Statistics({ users }: { users: AdminUser[] }) {
     URL.revokeObjectURL(url);
   };
 
-  const totalMatch = 47;
-  const successMatch = 31;
-  const matchRate = Math.round((successMatch / totalMatch) * 100);
+  const emptyChart = (
+    <div style={{ height: 110, display: "flex", alignItems: "center", justifyContent: "center", color: C.muted, fontSize: 13 }}>
+      データがありません
+    </div>
+  );
 
   return (
     <div>
@@ -776,40 +722,44 @@ function Statistics({ users }: { users: AdminUser[] }) {
       />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 20 }}>
-        <StatCard label="総マッチング数"    value={totalMatch}    color={C.accent} />
-        <StatCard label="成立数"            value={successMatch}  color={C.green}  />
-        <StatCard label="マッチング成立率"  value={`${matchRate}%`} color={C.yellow} />
+        <StatCard label="総マッチング数"   value={totalMatch}         color={C.accent} />
+        <StatCard label="成立数"           value={successMatch}        color={C.green}  />
+        <StatCard label="マッチング成立率" value={`${matchRate}%`}    color={C.yellow} />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
         <div style={{ background: C.card, border: `1px solid ${C.cardB}`, borderRadius: 14, padding: 22 }}>
           <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 16 }}>地域別登録数</div>
-          <BarChart data={REGIONAL_STATS} color={C.accent} />
+          {regionalStats.length > 0 ? <BarChart data={regionalStats} color={C.accent} /> : emptyChart}
         </div>
         <div style={{ background: C.card, border: `1px solid ${C.cardB}`, borderRadius: 14, padding: 22 }}>
           <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 16 }}>週別マッチング件数</div>
-          <BarChart data={WEEKLY_TREND} color={C.green} />
+          {emptyChart}
         </div>
       </div>
 
       <div style={{ background: C.card, border: `1px solid ${C.cardB}`, borderRadius: 14, padding: 22 }}>
         <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 16 }}>アカウント種別内訳</div>
-        <div style={{ display: "flex", gap: 32, flexWrap: "wrap", alignItems: "center" }}>
-          {[
-            { label: "大学チーム",  count: users.filter((u) => u.role === "university").length,  color: C.accent },
-            { label: "個人/クラブ", count: users.filter((u) => u.role === "individual").length, color: C.green  },
-            { label: "管理人",      count: users.filter((u) => u.role === "manager").length,     color: C.muted  },
-          ].map((item) => (
-            <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ width: 12, height: 12, borderRadius: 3, background: item.color }} />
-              <span style={{ fontSize: 13, color: C.muted }}>{item.label}</span>
-              <span style={{ fontSize: 22, fontWeight: 900, color: item.color }}>{item.count}</span>
+        {users.length === 0 ? (
+          <div style={{ color: C.muted, fontSize: 13 }}>データがありません</div>
+        ) : (
+          <div style={{ display: "flex", gap: 32, flexWrap: "wrap", alignItems: "center" }}>
+            {[
+              { label: "大学チーム",  count: users.filter((u) => u.role === "university").length,  color: C.accent },
+              { label: "個人/クラブ", count: users.filter((u) => u.role === "individual").length, color: C.green  },
+              { label: "管理人",      count: users.filter((u) => u.role === "manager").length,     color: C.muted  },
+            ].map((item) => (
+              <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ width: 12, height: 12, borderRadius: 3, background: item.color }} />
+                <span style={{ fontSize: 13, color: C.muted }}>{item.label}</span>
+                <span style={{ fontSize: 22, fontWeight: 900, color: item.color }}>{item.count}</span>
+              </div>
+            ))}
+            <div style={{ marginLeft: "auto", fontSize: 13, color: C.muted }}>
+              合計: <span style={{ fontWeight: 900, color: C.text, fontSize: 18 }}>{users.length}</span> アカウント
             </div>
-          ))}
-          <div style={{ marginLeft: "auto", fontSize: 13, color: C.muted }}>
-            合計: <span style={{ fontWeight: 900, color: C.text, fontSize: 18 }}>{users.length}</span> アカウント
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -944,7 +894,7 @@ export default function AdminPage() {
           {section === "chats"         && <ChatMonitor rooms={chatRooms} setRooms={setChatRooms} />}
           {section === "notifications" && <NotificationSender users={users} notifs={notifications} setNotifs={setNotifications} />}
           {section === "reports"       && <ReportManagement reports={reports} setReports={setReports} />}
-          {section === "stats"         && <Statistics users={users} />}
+          {section === "stats"         && <Statistics users={users} matches={matches} />}
         </main>
       </div>
     </div>
