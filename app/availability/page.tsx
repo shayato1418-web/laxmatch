@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
+import { useAuth } from "@/app/context/AuthContext";
 
 const C = {
   bg: "#0A0F1F",
@@ -49,9 +50,29 @@ function cellBg(st: SlotState): React.CSSProperties {
 }
 
 export default function AvailabilityPage() {
+  const { user } = useAuth();
   const [grid, setGrid] = useState<SlotState[][]>(mkGrid);
   const [flash, setFlash] = useState<`${number}-${number}` | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const saved = localStorage.getItem(`availability-${user.id}`);
+    if (!saved) return;
+    try {
+      const parsed = JSON.parse(saved) as SlotState[][];
+      if (Array.isArray(parsed) && parsed.length === TIME_SLOTS.length) {
+        setGrid(parsed);
+      }
+    } catch {
+      // ignore invalid saved data
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    localStorage.setItem(`availability-${user.id}`, JSON.stringify(grid));
+  }, [grid, user?.id]);
 
   const toggle = (si: number, di: number) => {
     setGrid((g) => {
@@ -70,11 +91,7 @@ export default function AvailabilityPage() {
     <div style={{ height: "100vh", display: "flex", background: C.bg, overflow: "hidden" }}>
       {/* Chrome bar */}
       <div className="chrome-bar" style={{ position: "fixed", top: 0, left: 0, right: 0, height: 42, background: C.header, borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", padding: "0 16px", gap: 10, zIndex: 50 }}>
-        <div style={{ display: "flex", gap: 7 }}>
-          {["#FF5F57","#FEBC2E","#28C840"].map((c) => (
-            <div key={c} style={{ width: 11, height: 11, borderRadius: "50%", background: c }} />
-          ))}
-        </div>
+
         <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
           <div style={{ minWidth: 360, background: "#161E33", border: `1px solid ${C.border2}`, borderRadius: 8, padding: "6px 16px", fontFamily: "'Roboto Mono', monospace", fontSize: 11, color: C.muted, textAlign: "center" }}>
             laxmatch.jp/availability

@@ -67,10 +67,10 @@ export default function Sidebar({ active }: { active: string }) {
 
   const unreadCount = notifs.filter((n) => !n.read).length;
 
-  const name = user?.name || "千葉大学";
+  const displayName = user?.role === "manager" ? "管理人" : user?.name || "ゲスト";
   const initials =
-    name.replace(/[ぁ-ん]+|[ァ-ン]+|[A-Za-z]/g, "").slice(0, 2) ||
-    name.slice(0, 2).toUpperCase();
+    displayName.replace(/[ぁ-ん]+|[ァ-ン]+|[A-Za-z]/g, "").slice(0, 2) ||
+    displayName.slice(0, 2).toUpperCase();
 
   return (
     <>
@@ -192,7 +192,7 @@ export default function Sidebar({ active }: { active: string }) {
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 12.5, fontWeight: 800, color: S.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {name}
+                {displayName}
               </div>
               <div style={{ fontSize: 10.5, color: S.muted }}>
                 {user?.role === "manager" ? "管理者" : user?.role === "individual" ? "個人/クラブ" : "大学チーム"}

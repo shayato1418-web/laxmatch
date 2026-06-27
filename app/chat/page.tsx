@@ -71,11 +71,6 @@ export default function ChatPage() {
     <div style={{ height: "100vh", display: "flex", background: C.bg, overflow: "hidden" }}>
       {/* Chrome bar */}
       <div className="chrome-bar" style={{ position: "fixed", top: 0, left: 0, right: 0, height: 42, background: C.header, borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", padding: "0 16px", gap: 10, zIndex: 50 }}>
-        <div style={{ display: "flex", gap: 7 }}>
-          {["#FF5F57","#FEBC2E","#28C840"].map((co) => (
-            <div key={co} style={{ width: 11, height: 11, borderRadius: "50%", background: co }} />
-          ))}
-        </div>
         <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
           <div style={{ minWidth: 360, background: "#161E33", border: `1px solid ${C.border2}`, borderRadius: 8, padding: "6px 16px", fontFamily: "'Roboto Mono', monospace", fontSize: 11, color: C.muted, textAlign: "center" }}>
             laxmatch.jp/chat

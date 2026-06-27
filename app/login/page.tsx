@@ -56,11 +56,7 @@ function LoginForm() {
     <div className="login-bg-mobile" style={{ minHeight: "100vh", background: C.bg, display: "flex", flexDirection: "column" }}>
       {/* Chrome bar */}
       <div className="chrome-bar" style={{ height: 42, background: C.panel, borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", padding: "0 16px", gap: 10, flexShrink: 0 }}>
-        <div style={{ display: "flex", gap: 7 }}>
-          {["#FF5F57","#FEBC2E","#28C840"].map((c) => (
-            <div key={c} style={{ width: 11, height: 11, borderRadius: "50%", background: c }} />
-          ))}
-        </div>
+
         <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
           <div style={{ minWidth: 360, background: "#161E33", border: `1px solid ${C.border2}`, borderRadius: 8, padding: "6px 16px", fontFamily: "'Roboto Mono', monospace", fontSize: 11, color: C.muted, textAlign: "center" }}>
             laxmatch.jp/login
@@ -148,6 +144,7 @@ function LoginForm() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={busy}
+                  placeholder="パスワードを入力"
                   style={{ background: "transparent", border: "none", fontSize: showPw ? 14 : 18, color: C.dim, outline: "none", flex: 1, letterSpacing: showPw ? 0 : 3 }}
                 />
                 <button
