@@ -25,6 +25,8 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (userData: Omit<User, 'id' | 'createdAt'> & { password: string }) => Promise<void>;
   logout: () => void;
+  updateProfile: (updates: Partial<Pick<User, 'name' | 'area' | 'level' | 'lineId' | 'notes'>>) => Promise<void>;
+  changePassword: (currentPw: string, newPw: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -146,8 +148,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('currentUser');
   };
 
+  const updateProfile = async (updates: Partial<Pick<User, 'name' | 'area' | 'level' | 'lineId' | 'notes'>>) => {
+    if (!user) return;
+    const updated = { ...user, ...updates };
+    setUser(updated);
+    localStorage.setItem('currentUser', JSON.stringify(updated));
+    const users = JSON.parse(localStorage.getItem('users') || '[]');
+    const idx = users.findIndex((u: { id: string }) => u.id === user.id);
+    if (idx >= 0) {
+      users[idx] = { ...users[idx], ...updates };
+      localStorage.setItem('users', JSON.stringify(users));
+    }
+  };
+
+  const changePassword = async (currentPw: string, newPw: string) => {
+    if (!user) throw new Error('ログインしていません');
+    const users = JSON.parse(localStorage.getItem('users') || '[]');
+    const idx = users.findIndex((u: { id: string; password: string }) => u.id === user.id && u.password === currentPw);
+    if (idx < 0) throw new Error('現在のパスワードが正しくありません');
+    users[idx].password = newPw;
+    localStorage.setItem('users', JSON.stringify(users));
+  };
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, register, logout, updateProfile, changePassword }}>
       {children}
     </AuthContext.Provider>
   );

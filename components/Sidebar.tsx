@@ -24,7 +24,7 @@ const LINKS = [
   { label: "探す",       href: "/explore" },
   { label: "空き日程",   href: "/availability" },
   { label: "マッチング", href: "/matches" },
-  { label: "チャット",   href: "/chat",  badge: "2" },
+  { label: "チャット",   href: "/chat" },
 ];
 
 export default function Sidebar({ active }: { active: string }) {
@@ -112,11 +112,6 @@ export default function Sidebar({ active }: { active: string }) {
               }}>
                 <span style={{ width: 7, height: 7, borderRadius: 2, background: isActive ? S.accent : "transparent", flexShrink: 0 }} />
                 <span style={{ flex: 1 }}>{item.label}</span>
-                {item.badge && (
-                  <span style={{ background: S.badge, color: "#fff", fontFamily: "'Roboto Mono', monospace", fontSize: 10, fontWeight: 700, borderRadius: 10, padding: "1px 7px" }}>
-                    {item.badge}
-                  </span>
-                )}
               </Link>
             );
           })}
@@ -150,9 +145,9 @@ export default function Sidebar({ active }: { active: string }) {
             )}
           </button>
 
-          <Link href="#" style={{
-            background: "transparent",
-            color: S.muted,
+          <Link href="/settings" style={{
+            background: active === "/settings" ? S.activeBg : "transparent",
+            color: active === "/settings" ? "#fff" : S.muted,
             display: "flex",
             alignItems: "center",
             gap: 11,
@@ -162,7 +157,7 @@ export default function Sidebar({ active }: { active: string }) {
             borderRadius: 10,
             textDecoration: "none",
           }}>
-            <span style={{ width: 7, height: 7, borderRadius: 2, background: "transparent", flexShrink: 0 }} />
+            <span style={{ width: 7, height: 7, borderRadius: 2, background: active === "/settings" ? S.accent : "transparent", flexShrink: 0 }} />
             <span>設定</span>
           </Link>
         </nav>
@@ -197,7 +192,9 @@ export default function Sidebar({ active }: { active: string }) {
               <div style={{ fontSize: 12.5, fontWeight: 800, color: S.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {name}
               </div>
-              <div style={{ fontSize: 10.5, color: S.muted }}>渉外担当</div>
+              <div style={{ fontSize: 10.5, color: S.muted }}>
+                {user?.role === "manager" ? "管理者" : user?.role === "individual" ? "個人/クラブ" : "大学チーム"}
+              </div>
             </div>
           </div>
         </div>
