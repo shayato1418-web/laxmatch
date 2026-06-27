@@ -51,7 +51,7 @@ export default function LoginPage() {
   const busy = loading || authLoading;
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, display: "flex", flexDirection: "column" }}>
+    <div className="login-bg-mobile" style={{ minHeight: "100vh", background: C.bg, display: "flex", flexDirection: "column" }}>
       {/* Chrome bar */}
       <div className="chrome-bar" style={{ height: 42, background: C.panel, borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", padding: "0 16px", gap: 10, flexShrink: 0 }}>
         <div style={{ display: "flex", gap: 7 }}>
@@ -96,11 +96,18 @@ export default function LoginPage() {
 
         {/* Right panel — form */}
         <div className="login-right" style={{ display: "flex", flexDirection: "column", justifyContent: "center", padding: "0 80px" }}>
-          <div className="login-mobile-logo" style={{ display: "none", fontFamily: "'Archivo', sans-serif", fontWeight: 900, fontSize: 22, letterSpacing: 0.5, marginBottom: 32 }}>
+          <div className="login-mobile-logo" style={{ display: "none", fontFamily: "'Archivo', sans-serif", fontWeight: 900, fontSize: 17, letterSpacing: 0.5, marginBottom: 0 }}>
             LAX<span style={{ color: C.accent }}>·</span>MATCH
           </div>
-          <div style={{ fontFamily: "'Roboto Mono', monospace", fontSize: 11, letterSpacing: 3, color: C.accent, fontWeight: 700 }}>WELCOME BACK</div>
-          <div style={{ fontSize: 30, fontWeight: 900, marginTop: 10 }}>ログイン</div>
+          {/* Mobile hero — 44px "WELCOME BACK" with gradient */}
+          <div className="login-hero" style={{ display: "none" }}>
+            <div style={{ fontFamily: "'Archivo', sans-serif", fontWeight: 900, fontSize: 44, lineHeight: 0.95, letterSpacing: "-1.5px", textTransform: "uppercase", marginTop: 26, marginBottom: 18 }}>
+              WELCOME<br />
+              <span style={{ background: "linear-gradient(110deg, #6E8BFF, #3FC7FF)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>BACK</span>
+            </div>
+          </div>
+          <div className="login-welcome-label" style={{ fontFamily: "'Roboto Mono', monospace", fontSize: 11, letterSpacing: 3, color: C.accent, fontWeight: 700 }}>WELCOME BACK</div>
+          <div className="login-title" style={{ fontSize: 30, fontWeight: 900, marginTop: 10 }}>ログイン</div>
           <div style={{ fontSize: 13.5, color: C.muted, marginTop: 8 }}>渉外アカウントでサインインしてください</div>
 
           {error && (
@@ -170,6 +177,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={busy}
+              className="login-submit-btn"
               style={{
                 display: "block", width: "100%", marginTop: 24,
                 background: C.accent, color: "#fff",
@@ -195,6 +203,7 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={() => router.push("/register?type=university")}
+            className="login-register-btn"
             style={{ border: `1px solid #2C3658`, borderRadius: 13, padding: 15, textAlign: "center", fontWeight: 700, fontSize: 14, color: C.dim, background: "none", cursor: "pointer", width: "100%" }}
           >
             大学メールアドレスで続ける

@@ -94,7 +94,7 @@ export default function MatchesPage() {
             ) : (
               <div className="matches-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 16 }}>
                 {matches.map((m) => (
-                  <div key={m.uni} style={{ background: C.card, border: `1px solid ${C.cardBorder}`, borderRadius: 16, padding: 20, position: "relative", overflow: "hidden" }}>
+                  <div key={m.uni} className="app-card" style={{ background: C.card, border: `1px solid ${C.cardBorder}`, borderRadius: 16, padding: 20, position: "relative", overflow: "hidden" }}>
                     {/* Color left border */}
                     <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: m.borderColor }} />
 

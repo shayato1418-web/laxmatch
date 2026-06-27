@@ -240,6 +240,7 @@ export default function ChatPage() {
                     <button
                       onClick={send}
                       disabled={!draft.trim()}
+                      className={draft.trim() ? "send-btn-active" : ""}
                       style={{
                         width: 42, height: 42, borderRadius: "50%",
                         background: draft.trim() ? C.accent : "#161E33",

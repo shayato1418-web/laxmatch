@@ -60,6 +60,7 @@ export default function ExplorePage() {
       <button
         key={label}
         onClick={() => setFilter((f) => ({ ...f, [key]: active ? "" : val }))}
+        className={active ? "chip-active" : ""}
         style={{
           background: active ? C.accent : "#161E33",
           color: active ? "#fff" : C.dim,
@@ -124,7 +125,7 @@ export default function ExplorePage() {
           <div className="app-scroll" style={{ flex: 1, overflowY: "auto", padding: "22px 28px" }}>
             <div className="explore-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}>
               {teams.map((t) => (
-                <div key={t.uni} style={{ background: C.card, border: `1px solid ${C.cardBorder}`, borderRadius: 16, padding: 18 }}>
+                <div key={t.uni} className="app-card" style={{ background: C.card, border: `1px solid ${C.cardBorder}`, borderRadius: 16, padding: 18 }}>
                   <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                     <div style={{ width: 48, height: 48, borderRadius: 13, background: t.hue, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Archivo', sans-serif", fontWeight: 900, fontSize: 14, color: "#fff", flexShrink: 0, letterSpacing: -0.5 }}>
                       {t.en}
@@ -155,6 +156,7 @@ export default function ExplorePage() {
 
                   <button
                     onClick={() => toggle(t.uni)}
+                    className={applied.has(t.uni) ? "" : "gradient-btn"}
                     style={{
                       display: "block", width: "100%", marginTop: 14,
                       background: applied.has(t.uni) ? "#25D07D" : C.accent,

@@ -40,12 +40,12 @@ function mkGrid(): SlotState[][] {
 }
 
 function cellBg(st: SlotState): React.CSSProperties {
-  if (st === "free") return { background: "#4D5BFF", color: "#fff" };
+  if (st === "free") return { background: "linear-gradient(135deg, #4D5BFF, #3FC7FF)", color: "#fff" };
   if (st === "busy") return {
-    background: "repeating-linear-gradient(45deg,#1A2238,#1A2238 4px,#141A2C 4px,#141A2C 8px)",
+    background: "repeating-linear-gradient(45deg,#1A2238,#1A2238 3px,#141A2C 3px,#141A2C 6px)",
     color: "#6A748F",
   };
-  return { background: "#0D1424", color: "transparent" };
+  return { background: "#0E1424", color: "transparent" };
 }
 
 export default function AvailabilityPage() {
@@ -99,7 +99,7 @@ export default function AvailabilityPage() {
                 <span style={{ fontSize: 13, fontWeight: 800 }}>6月23日 — 29日</span>
                 <span style={{ fontSize: 15, color: C.muted, cursor: "pointer", userSelect: "none" }}>›</span>
               </div>
-              <button style={{ background: C.accent, color: "#fff", fontSize: 13, fontWeight: 800, padding: "10px 20px", borderRadius: 10, border: "none", cursor: "pointer" }}>
+              <button className="avail-publish-btn gradient-btn" style={{ background: C.accent, color: "#fff", fontSize: 13, fontWeight: 800, padding: "10px 20px", borderRadius: 10, border: "none", cursor: "pointer" }}>
                 公開する
               </button>
             </div>
@@ -108,9 +108,9 @@ export default function AvailabilityPage() {
           {/* Legend */}
           <div style={{ display: "flex", gap: 20, padding: "10px 24px", borderBottom: `1px solid #141B2E`, flexShrink: 0, alignItems: "center" }}>
             {[
-              { bg: "#4D5BFF", label: "空き" },
-              { bg: "repeating-linear-gradient(45deg,#1A2238,#1A2238 4px,#141A2C 4px,#141A2C 8px)", label: "予定あり" },
-              { bg: "#0D1424", label: "未設定", border: `1px solid ${C.cellBorder}` },
+              { bg: "linear-gradient(135deg, #4D5BFF, #3FC7FF)", label: "空き" },
+              { bg: "repeating-linear-gradient(45deg,#1A2238,#1A2238 3px,#141A2C 3px,#141A2C 6px)", label: "予定あり" },
+              { bg: "#0E1424", label: "未設定", border: `1px solid ${C.cellBorder}` },
             ].map((l) => (
               <div key={l.label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <div style={{ width: 12, height: 12, borderRadius: 3, background: l.bg, border: l.border, flexShrink: 0 }} />

@@ -65,6 +65,31 @@ button, input, textarea, select { font: inherit; }
 
 .chat-back-btn { display: none; }
 
+/* ── Global design tokens (match Framer) ─────────────────────────────────── */
+
+/* Gradient card background */
+.app-card {
+  background: linear-gradient(165deg, #131B2E, #0E1424) !important;
+  border-color: rgba(120, 150, 255, 0.12) !important;
+}
+
+/* Active filter chip */
+.chip-active {
+  background: linear-gradient(120deg, #4D5BFF, #3FC7FF) !important;
+  border: none !important;
+}
+
+/* Gradient CTA / action buttons */
+.gradient-btn {
+  background: linear-gradient(120deg, #4D5BFF, #3FC7FF) !important;
+}
+
+/* Chat send button (active state) */
+.send-btn-active {
+  background: linear-gradient(120deg, #4D5BFF, #3FC7FF) !important;
+  box-shadow: 0 8px 18px rgba(77, 91, 255, 0.4) !important;
+}
+
 /* ── App pages ≤768px ────────────────────────────────────────────────────── */
 
 @media (max-width: 768px) {
@@ -81,6 +106,9 @@ button, input, textarea, select { font: inherit; }
   .app-scroll { padding-bottom: 72px !important; }
 
   /* Login */
+  .login-bg-mobile {
+    background: radial-gradient(120% 60% at 50% 0%, #1A2A52 0%, #0A0F1F 52%) !important;
+  }
   .login-body {
     grid-template-columns: 1fr !important;
     overflow: visible !important;
@@ -92,6 +120,27 @@ button, input, textarea, select { font: inherit; }
     overflow-y: auto !important;
   }
   .login-mobile-logo { display: block !important; }
+  .login-hero { display: block !important; }
+  .login-welcome-label { display: none !important; }
+  .login-title { display: none !important; }
+  .login-submit-btn {
+    background: linear-gradient(120deg, #4D5BFF, #3FC7FF) !important;
+    box-shadow: 0 12px 28px rgba(77, 91, 255, 0.4) !important;
+    border-radius: 14px !important;
+  }
+  .login-register-btn {
+    background: rgba(18, 24, 41, 0.4) !important;
+    border-radius: 14px !important;
+  }
+
+  /* Availability publish button */
+  .avail-publish-btn {
+    background: linear-gradient(120deg, #4D5BFF, #3FC7FF) !important;
+    box-shadow: 0 12px 28px rgba(77, 91, 255, 0.36) !important;
+    border-radius: 13px !important;
+    padding: 14px 22px !important;
+    font-size: 15px !important;
+  }
 
   /* Explore */
   .explore-header {
