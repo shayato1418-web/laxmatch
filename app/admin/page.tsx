@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/app/context/AuthContext";
+import { useAuth, ADMIN_EMAILS } from "@/app/context/AuthContext";
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -834,33 +834,30 @@ export default function AdminPage() {
   const router = useRouter();
   const [section, setSection] = useState<SectionId>("dashboard");
   const [users, setUsers] = useState<AdminUser[]>([]);
-  const [matches, setMatches] = useState<Match[]>(SAMPLE_MATCHES);
-  const [chatRooms, setChatRooms] = useState<ChatRoom[]>(SAMPLE_CHATS);
-  const [notifications, setNotifications] = useState<Notification[]>(INIT_NOTIFICATIONS);
-  const [reports, setReports] = useState<Report[]>(INIT_REPORTS);
+  const [matches, setMatches] = useState<Match[]>([]);
+  const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [reports, setReports] = useState<Report[]>([]);
+
+  const isAdmin = (ADMIN_EMAILS as readonly string[]).includes(user?.email || "") || user?.role === "manager";
 
   useEffect(() => {
-    if (!isLoading && user?.role !== "manager") router.replace("/login");
-  }, [user, isLoading, router]);
+    if (!isLoading && !isAdmin) router.replace("/");
+  }, [user, isLoading, isAdmin, router]);
 
-  // Merge localStorage users with sample data
   useEffect(() => {
     const stored = JSON.parse(localStorage.getItem("users") || "[]") as Array<{
       id: string; email: string; password: string; name: string; role: UserRole;
     }>;
-    if (stored.length > 0) {
-      setUsers(
-        stored.map((u) => ({
-          id: u.id, name: u.name, email: u.email, password: u.password, role: u.role,
-          area: "未設定", registeredAt: "2026/06/01", lastLogin: "—", status: "active" as UserStatus, flagged: false,
-        }))
-      );
-    } else {
-      setUsers(SAMPLE_USERS);
-    }
+    setUsers(
+      stored.map((u) => ({
+        id: u.id, name: u.name, email: u.email, password: u.password, role: u.role,
+        area: "未設定", registeredAt: new Date().toLocaleDateString("ja-JP"), lastLogin: "—", status: "active" as UserStatus, flagged: false,
+      }))
+    );
   }, []);
 
-  if (isLoading || !user || user.role !== "manager") {
+  if (isLoading || !user || !isAdmin) {
     return (
       <div style={{ height: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", color: C.muted, fontFamily: "'Roboto Mono', monospace", fontSize: 13 }}>
         読み込み中...
@@ -928,7 +925,7 @@ export default function AdminPage() {
           <div style={{ marginTop: "auto" }}>
             <div style={{ padding: "10px 12px", background: "#111728", borderRadius: 10, border: `1px solid #1F2740`, marginBottom: 10 }}>
               <div style={{ fontSize: 12.5, fontWeight: 800 }}>管理者</div>
-              <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2, fontFamily: "'Roboto Mono', monospace" }}>admin</div>
+              <div style={{ fontSize: 10, color: C.muted, marginTop: 2, fontFamily: "'Roboto Mono', monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email}</div>
             </div>
             <button
               onClick={() => { logout(); router.push("/login"); }}

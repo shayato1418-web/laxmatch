@@ -4,6 +4,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 
 export type UserRole = 'university' | 'individual' | 'manager';
 
+export const ADMIN_EMAILS = ["s.hayato1418@gmail.com", "laxmatch14@gmail.com"] as const;
+
 export interface User {
   id: string;
   email: string;
@@ -79,11 +81,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error('メールアドレスまたはパスワードが正しくありません');
       }
 
+      const isAdminEmail = (ADMIN_EMAILS as readonly string[]).includes(foundUser.email);
       const userData: User = {
         id: foundUser.id,
         email: foundUser.email,
         name: foundUser.name,
-        role: foundUser.role,
+        role: isAdminEmail ? "manager" : foundUser.role,
         createdAt: new Date().toISOString(),
       };
 

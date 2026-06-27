@@ -32,13 +32,7 @@ type Match = {
   cta: string;
 };
 
-const ALL_MATCHES: Match[] = [
-  { uni: "中央大学",     en: "CHUO", hue: "#3D8BFF", venue: "多摩総合グラウンド", date: "7/06 (日) 10:00", status: "調整中",   statusColor: "#4D5BFF", borderColor: "#4D5BFF", group: "進行中", cta: "チャット" },
-  { uni: "早稲田大学",   en: "WU",   hue: "#4D5BFF", venue: "東伏見グラウンド",   date: "7/13 (日) 未定", status: "日程提案中", statusColor: "#4D5BFF", borderColor: "#4D5BFF", group: "進行中", cta: "チャット" },
-  { uni: "慶應義塾大学", en: "KEIO", hue: "#4D5BFF", venue: "日吉グラウンド",     date: "6/29 (日) 13:00",status: "成立",     statusColor: "#25D07D", borderColor: "#25D07D", group: "成立",   cta: "チャット" },
-  { uni: "明治大学",     en: "MEIJI",hue: "#6E5BFF", venue: "会場調整中",         date: "申請日 6/20",   status: "申請中",   statusColor: "#FFB23E", borderColor: "#FFB23E", group: "申請中", cta: "取消" },
-  { uni: "法政大学",     en: "HOSEI",hue: "#3FB6FF", venue: "多摩総合グラウンド", date: "6/22 (日) 終了", status: "終了",     statusColor: "#6A748F", borderColor: "#6A748F", group: "履歴",   cta: "詳細" },
-];
+const ALL_MATCHES: Match[] = [];
 
 const TABS: MatchGroup[] = ["進行中", "成立", "申請中", "履歴"];
 
@@ -93,8 +87,8 @@ export default function MatchesPage() {
           {/* Match cards */}
           <div style={{ flex: 1, overflowY: "auto", padding: "8px 28px 24px" }}>
             {matches.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "60px 0", color: C.muted }}>
-                該当するマッチングはありません
+              <div style={{ textAlign: "center", padding: "60px 0", color: C.muted, fontSize: 14 }}>
+                まだマッチングはありません
               </div>
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 16 }}>
