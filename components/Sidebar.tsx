@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/context/AuthContext";
 
 const S = {
@@ -28,7 +29,8 @@ const LINKS = [
 ];
 
 export default function Sidebar({ active }: { active: string }) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const router = useRouter();
   const [notifOpen, setNotifOpen] = useState(false);
   const [dropTop, setDropTop] = useState(200);
   const [notifs, setNotifs] = useState<Notif[]>([]);
@@ -196,6 +198,13 @@ export default function Sidebar({ active }: { active: string }) {
                 {user?.role === "manager" ? "管理者" : user?.role === "individual" ? "個人/クラブ" : "大学チーム"}
               </div>
             </div>
+            <button
+              onClick={async () => { await logout(); router.replace("/login"); }}
+              title="ログアウト"
+              style={{ background: "none", border: "none", cursor: "pointer", color: "#5A647F", fontSize: 14, padding: "4px 2px", flexShrink: 0 }}
+            >
+              ⏻
+            </button>
           </div>
         </div>
       </aside>

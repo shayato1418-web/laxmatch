@@ -57,7 +57,7 @@ function TextInput({ value, onChange, placeholder, disabled }: { value: string; 
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { user, isLoading, updateProfile, changePassword } = useAuth();
+  const { user, isLoading, updateProfile, changePassword, logout } = useAuth();
 
   const [name, setName] = useState("");
   const [area, setArea] = useState("");
@@ -282,6 +282,20 @@ export default function SettingsPage() {
               </button>
             </div>
           )}
+
+          {/* Logout */}
+          <div style={{ background: C.card, border: `1px solid ${C.cardBorder}`, borderRadius: 16, padding: "20px 32px", maxWidth: 600, marginTop: 24 }}>
+            <button
+              onClick={async () => { await logout(); router.replace("/login"); }}
+              style={{
+                background: "transparent", color: "#FF5C6C", padding: "13px 28px",
+                borderRadius: 12, fontWeight: 800, fontSize: 14,
+                border: "1px solid rgba(255,92,108,0.3)", cursor: "pointer", width: "100%",
+              }}
+            >
+              ログアウト
+            </button>
+          </div>
         </main>
       </div>
       <MobileBottomNav />

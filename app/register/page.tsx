@@ -29,6 +29,7 @@ function RegisterForm() {
   const [notes, setNotes] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [needsConfirmation, setNeedsConfirmation] = useState(false);
 
   const roleLabel =
     role === "manager"
@@ -72,7 +73,7 @@ function RegisterForm() {
     }
 
     try {
-      await registerUser({
+      const result = await registerUser({
         email,
         name: teamName,
         role,
@@ -88,14 +89,38 @@ function RegisterForm() {
         }),
       });
 
-      setTimeout(() => {
-        router.push("/");
-      }, 500);
+      if (result.needsConfirmation) {
+        setNeedsConfirmation(true);
+      } else {
+        router.push("/explore");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "登録処理中にエラーが発生しました。");
       setIsLoading(false);
     }
   };
+
+  if (needsConfirmation) {
+    return (
+      <main className="min-h-screen bg-[#081025] px-4 py-10 flex items-center justify-center">
+        <div className="w-full max-w-md text-center space-y-6">
+          <div className="text-5xl">📧</div>
+          <h1 className="text-3xl font-black text-white">確認メールを送信しました</h1>
+          <p className="text-slate-300 leading-7">
+            <span className="font-semibold text-[#93c5fd]">{email}</span> に確認メールをお送りしました。
+            <br />メール内のリンクをクリックして登録を完了してください。
+          </p>
+          <button
+            type="button"
+            onClick={() => router.push("/login")}
+            className="mt-4 rounded-[1.75rem] bg-[#4D5BFF] px-8 py-4 text-base font-semibold text-white hover:brightness-110 transition"
+          >
+            ログインページへ
+          </button>
+        </div>
+      </main>
+    );
+  }
 
   if (step === "role") {
     return (

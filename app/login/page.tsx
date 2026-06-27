@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useAuth } from "@/app/context/AuthContext";
+import { Suspense } from "react";
+import { useAuth, ADMIN_EMAILS } from "@/app/context/AuthContext";
 
 const C = {
   bg: "#0A0F1F",
@@ -18,8 +19,9 @@ const C = {
   muted2: "#7A85A6",
 } as const;
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login, isLoading: authLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -38,9 +40,9 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(email, password);
-      const stored = localStorage.getItem("currentUser");
-      const loggedIn = stored ? JSON.parse(stored) : null;
-      router.push(loggedIn?.role === "manager" ? "/admin" : "/explore");
+      const next = searchParams.get("next");
+      const isAdmin = (ADMIN_EMAILS as readonly string[]).includes(email);
+      router.push(next ?? (isAdmin ? "/admin" : "/explore"));
     } catch (err) {
       setError(err instanceof Error ? err.message : "ログインに失敗しました。");
     } finally {
@@ -217,5 +219,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   );
 }

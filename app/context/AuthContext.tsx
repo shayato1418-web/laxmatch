@@ -1,10 +1,12 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { createClient } from '@/lib/supabase/client';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 export type UserRole = 'university' | 'individual' | 'manager';
 
-export const ADMIN_EMAILS = ["s.hayato1418@gmail.com", "laxmatch14@gmail.com"] as const;
+export const ADMIN_EMAILS = ['s.hayato1418@gmail.com', 'laxmatch14@gmail.com'] as const;
 
 export interface User {
   id: string;
@@ -25,138 +27,138 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (userData: Omit<User, 'id' | 'createdAt'> & { password: string }) => Promise<void>;
-  logout: () => void;
+  register: (userData: Omit<User, 'id' | 'createdAt'> & { password: string }) => Promise<{ needsConfirmation: boolean }>;
+  logout: () => Promise<void>;
   updateProfile: (updates: Partial<Pick<User, 'name' | 'area' | 'level' | 'lineId' | 'notes'>>) => Promise<void>;
   changePassword: (currentPw: string, newPw: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function mapSupabaseUser(sbUser: SupabaseUser): User {
+  const meta = sbUser.user_metadata ?? {};
+  const email = sbUser.email ?? '';
+  const isAdmin = (ADMIN_EMAILS as readonly string[]).includes(email);
+  return {
+    id: sbUser.id,
+    email,
+    name: meta.name ?? email,
+    role: isAdmin ? 'manager' : (meta.role ?? 'university'),
+    individualType: meta.individualType,
+    area: meta.area,
+    level: meta.level,
+    gender: meta.gender,
+    memberCount: meta.memberCount,
+    lineId: meta.lineId,
+    notes: meta.notes,
+    createdAt: sbUser.created_at,
+  };
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const supabase = createClient();
 
-  // 初期化：localStorage からユーザー情報を復元
   useEffect(() => {
-    const storedUser = localStorage.getItem('currentUser');
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (e) {
-        console.error('Failed to parse stored user:', e);
+    // Subscribe to auth state — INITIAL_SESSION fires immediately with current session
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setUser(session?.user ? mapSupabaseUser(session.user) : null);
+        setIsLoading(false);
       }
-    }
-    setIsLoading(false);
+    );
+    return () => subscription.unsubscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const login = async (email: string, password: string) => {
     setIsLoading(true);
     try {
-      // 固定管理者アカウント
-      if (email === "admin" && password === "laxmatch2024") {
-        const adminUser: User = {
-          id: "admin",
-          email: "admin",
-          name: "管理者",
-          role: "manager",
-          createdAt: new Date().toISOString(),
-        };
-        setUser(adminUser);
-        localStorage.setItem('currentUser', JSON.stringify(adminUser));
-        return;
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        if (error.message.includes('Invalid login credentials')) {
+          throw new Error('メールアドレスまたはパスワードが正しくありません');
+        }
+        if (error.message.includes('Email not confirmed')) {
+          throw new Error('メールアドレスの確認が完了していません。受信ボックスをご確認ください。');
+        }
+        throw new Error(error.message);
       }
-
-      // ローカル ストレージから登録ユーザーを取得
-      const users = JSON.parse(localStorage.getItem('users') || '[]') as Array<{
-        id: string;
-        email: string;
-        password: string;
-        name: string;
-        role: UserRole;
-      }>;
-
-      const foundUser = users.find((u) => u.email === email && u.password === password);
-      if (!foundUser) {
-        throw new Error('メールアドレスまたはパスワードが正しくありません');
-      }
-
-      const isAdminEmail = (ADMIN_EMAILS as readonly string[]).includes(foundUser.email);
-      const userData: User = {
-        id: foundUser.id,
-        email: foundUser.email,
-        name: foundUser.name,
-        role: isAdminEmail ? "manager" : foundUser.role,
-        createdAt: new Date().toISOString(),
-      };
-
-      setUser(userData);
-      localStorage.setItem('currentUser', JSON.stringify(userData));
     } finally {
       setIsLoading(false);
     }
   };
 
-  const register = async (userData: Omit<User, 'id' | 'createdAt'> & { password: string }) => {
+  const register = async (
+    userData: Omit<User, 'id' | 'createdAt'> & { password: string }
+  ): Promise<{ needsConfirmation: boolean }> => {
     setIsLoading(true);
     try {
-      const users = JSON.parse(localStorage.getItem('users') || '[]');
-
-      // メールが既に登録されていないか確認
-      if (users.some((u: { email: string }) => u.email === userData.email)) {
-        throw new Error('このメールアドレスは既に登録されています');
-      }
-
-      const newUser = {
-        id: `user_${Date.now()}`,
-        ...userData,
-        createdAt: new Date().toISOString(),
-      };
-
-      users.push({
-        id: newUser.id,
+      const { data, error } = await supabase.auth.signUp({
         email: userData.email,
         password: userData.password,
-        name: userData.name,
-        role: userData.role,
+        options: {
+          data: {
+            name: userData.name,
+            role: userData.role,
+            individualType: userData.individualType,
+            area: userData.area,
+            level: userData.level,
+            gender: userData.gender,
+            memberCount: userData.memberCount,
+            lineId: userData.lineId,
+            notes: userData.notes,
+          },
+        },
       });
 
-      localStorage.setItem('users', JSON.stringify(users));
+      if (error) {
+        if (error.message.includes('already registered') || error.message.includes('already been registered')) {
+          throw new Error('このメールアドレスは既に登録されています');
+        }
+        throw new Error(error.message);
+      }
 
-      // 登録後は自動ログイン
-      const loginUser: User = {
-        id: newUser.id,
-        email: userData.email,
-        name: userData.name,
-        role: userData.role,
-        individualType: userData.individualType,
-        area: userData.area,
-        level: userData.level,
-        gender: userData.gender,
-        memberCount: userData.memberCount,
-        lineId: userData.lineId,
-        notes: userData.notes,
-        createdAt: newUser.createdAt,
-      };
+      // Also persist to localStorage for admin page compatibility
+      if (data.user) {
+        const stored = JSON.parse(localStorage.getItem('users') ?? '[]');
+        if (!stored.some((u: { id: string }) => u.id === data.user!.id)) {
+          stored.push({
+            id: data.user.id,
+            email: userData.email,
+            name: userData.name,
+            role: userData.role,
+            area: userData.area ?? '',
+            createdAt: new Date().toISOString(),
+          });
+          localStorage.setItem('users', JSON.stringify(stored));
+        }
+      }
 
-      setUser(loginUser);
-      localStorage.setItem('currentUser', JSON.stringify(loginUser));
+      // session is null when email confirmation is required
+      return { needsConfirmation: !data.session };
     } finally {
       setIsLoading(false);
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
-    localStorage.removeItem('currentUser');
   };
 
-  const updateProfile = async (updates: Partial<Pick<User, 'name' | 'area' | 'level' | 'lineId' | 'notes'>>) => {
+  const updateProfile = async (
+    updates: Partial<Pick<User, 'name' | 'area' | 'level' | 'lineId' | 'notes'>>
+  ) => {
     if (!user) return;
+    const { error } = await supabase.auth.updateUser({ data: updates });
+    if (error) throw new Error(error.message);
     const updated = { ...user, ...updates };
     setUser(updated);
-    localStorage.setItem('currentUser', JSON.stringify(updated));
-    const users = JSON.parse(localStorage.getItem('users') || '[]');
+
+    // Keep localStorage in sync for admin page
+    const users = JSON.parse(localStorage.getItem('users') ?? '[]');
     const idx = users.findIndex((u: { id: string }) => u.id === user.id);
     if (idx >= 0) {
       users[idx] = { ...users[idx], ...updates };
@@ -166,11 +168,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const changePassword = async (currentPw: string, newPw: string) => {
     if (!user) throw new Error('ログインしていません');
-    const users = JSON.parse(localStorage.getItem('users') || '[]');
-    const idx = users.findIndex((u: { id: string; password: string }) => u.id === user.id && u.password === currentPw);
-    if (idx < 0) throw new Error('現在のパスワードが正しくありません');
-    users[idx].password = newPw;
-    localStorage.setItem('users', JSON.stringify(users));
+
+    // Verify current password by re-authenticating
+    const { error: verifyError } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password: currentPw,
+    });
+    if (verifyError) throw new Error('現在のパスワードが正しくありません');
+
+    const { error } = await supabase.auth.updateUser({ password: newPw });
+    if (error) throw new Error(error.message);
   };
 
   return (
