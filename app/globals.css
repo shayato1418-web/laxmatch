@@ -21,3 +21,405 @@ body {
 button, input, textarea, select { font: inherit; }
 
 ::selection { background: rgba(77, 91, 255, 0.35); color: #f8fafc; }
+
+/* ── Landing page ────────────────────────────────────────────────────────── */
+
+.lp {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #0A0F1F;
+  color: #EAF0FF;
+  font-family: 'Noto Sans JP', sans-serif;
+}
+
+/* Header */
+.lp-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 22px 48px;
+  border-bottom: 1px solid #1A2138;
+  flex-shrink: 0;
+}
+.lp-logo-area {
+  display: flex;
+  align-items: center;
+  gap: 40px;
+}
+.lp-nav {
+  display: flex;
+  gap: 28px;
+  font-size: 13.5px;
+  font-weight: 700;
+}
+.lp-nav a {
+  color: #9AA4C2;
+  text-decoration: none;
+}
+.lp-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.lp-login {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #C7D0EA;
+  text-decoration: none;
+}
+.lp-cta-btn {
+  background: #4D5BFF;
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 800;
+  padding: 11px 20px;
+  border-radius: 11px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* Hamburger */
+.lp-hamburger {
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px 4px;
+  flex-shrink: 0;
+}
+.lp-hamburger span {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: #C7D0EA;
+  border-radius: 2px;
+  transition: transform 0.2s, opacity 0.2s;
+}
+.lp-hamburger.open span:nth-child(1) {
+  transform: rotate(45deg) translate(5px, 5px);
+}
+.lp-hamburger.open span:nth-child(2) {
+  opacity: 0;
+}
+.lp-hamburger.open span:nth-child(3) {
+  transform: rotate(-45deg) translate(5px, -5px);
+}
+
+/* Mobile dropdown menu */
+.lp-mobile-menu {
+  display: none;
+  flex-direction: column;
+  background: #0B1120;
+  border-bottom: 1px solid #1A2138;
+  padding: 4px 24px 16px;
+}
+.lp-mobile-menu.open {
+  display: flex;
+}
+.lp-mobile-menu a {
+  padding: 15px 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #9AA4C2;
+  text-decoration: none;
+  border-bottom: 1px solid #1A2138;
+}
+.lp-mobile-menu a:last-child {
+  border-bottom: none;
+}
+
+/* Hero */
+.lp-hero {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+  padding: 60px 48px 50px;
+  align-items: center;
+}
+.lp-hero-title {
+  font-family: 'Archivo', sans-serif;
+  font-weight: 900;
+  font-size: 96px;
+  line-height: 0.88;
+  letter-spacing: -3px;
+  text-transform: uppercase;
+  margin-top: 20px;
+}
+.lp-hero-sub {
+  font-size: 30px;
+  font-weight: 900;
+  margin-top: 26px;
+  line-height: 1.35;
+}
+.lp-hero-desc {
+  font-size: 15px;
+  color: #8A94B2;
+  margin-top: 16px;
+  line-height: 1.8;
+  max-width: 460px;
+}
+.lp-hero-btns {
+  display: flex;
+  gap: 14px;
+  margin-top: 34px;
+  flex-wrap: wrap;
+}
+.lp-btn-primary {
+  background: #4D5BFF;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  padding: 16px 30px;
+  border-radius: 13px;
+  text-decoration: none;
+  box-shadow: 0 12px 28px rgba(77, 91, 255, .35);
+  white-space: nowrap;
+}
+.lp-btn-secondary {
+  border: 1px solid #2C3658;
+  color: #C7D0EA;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 16px 28px;
+  border-radius: 13px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* CTA card */
+.lp-cta-card {
+  position: relative;
+  border-radius: 20px;
+  padding: 52px 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  overflow: hidden;
+  background: linear-gradient(145deg, #111728 0%, #1a2645 60%, #0d1830 100%);
+  border: 1px solid #222A42;
+}
+.lp-cta-card-glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 38%, rgba(77, 91, 255, 0.22) 0%, transparent 65%);
+  pointer-events: none;
+}
+.lp-cta-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(77, 91, 255, 0.13);
+  border: 1px solid rgba(77, 91, 255, 0.35);
+  border-radius: 20px;
+  padding: 8px 18px;
+  margin-bottom: 32px;
+}
+.lp-cta-title {
+  position: relative;
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1.5;
+  margin-bottom: 14px;
+}
+.lp-cta-desc {
+  position: relative;
+  font-size: 14px;
+  color: #8A94B2;
+  line-height: 1.9;
+  margin-bottom: 40px;
+  max-width: 340px;
+}
+.lp-cta-main {
+  position: relative;
+  display: block;
+  width: 100%;
+  background: #4D5BFF;
+  color: #fff;
+  font-size: 17px;
+  font-weight: 900;
+  padding: 20px;
+  border-radius: 14px;
+  text-decoration: none;
+  text-align: center;
+  box-shadow: 0 16px 44px rgba(77, 91, 255, .42);
+  letter-spacing: 0.3px;
+}
+.lp-cta-note {
+  position: relative;
+  font-size: 12px;
+  color: #5A647F;
+  margin-top: 16px;
+}
+
+/* Features */
+.lp-features {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+  padding: 0 48px 56px;
+}
+
+/* How it works */
+.lp-how {
+  padding: 0 48px 64px;
+}
+.lp-how-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+  margin-top: 32px;
+}
+
+/* Footer */
+.lp-footer {
+  margin-top: auto;
+  border-top: 1px solid #1A2138;
+  padding: 24px 48px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.lp-footer-links {
+  display: flex;
+  gap: 24px;
+}
+
+/* ── Tablet (769–1024px) ──────────────────────────────────────────────────── */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .lp-header {
+    padding: 20px 32px;
+  }
+  .lp-logo-area {
+    gap: 24px;
+  }
+  .lp-nav {
+    gap: 18px;
+    font-size: 13px;
+  }
+  .lp-hero {
+    padding: 44px 32px 44px;
+    gap: 28px;
+  }
+  .lp-hero-title {
+    font-size: 64px;
+    letter-spacing: -2px;
+  }
+  .lp-hero-sub {
+    font-size: 24px;
+  }
+  .lp-hero-desc {
+    font-size: 14px;
+  }
+  .lp-cta-card {
+    padding: 36px 32px;
+  }
+  .lp-cta-title {
+    font-size: 20px;
+  }
+  .lp-cta-desc {
+    font-size: 13px;
+    margin-bottom: 28px;
+  }
+  .lp-features {
+    padding: 0 32px 48px;
+  }
+  .lp-how {
+    padding: 0 32px 56px;
+  }
+  .lp-footer {
+    padding: 20px 32px;
+  }
+}
+
+/* ── Mobile (≤768px) ─────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .lp-header {
+    padding: 14px 20px;
+  }
+  .lp-logo-area {
+    gap: 0;
+  }
+  .lp-nav {
+    display: none;
+  }
+  .lp-login {
+    display: none;
+  }
+  .lp-hamburger {
+    display: flex;
+  }
+  .lp-hero {
+    grid-template-columns: 1fr;
+    padding: 28px 20px 36px;
+    gap: 28px;
+  }
+  .lp-hero-title {
+    font-size: 48px;
+    letter-spacing: -1.5px;
+    line-height: 0.9;
+    margin-top: 14px;
+  }
+  .lp-hero-sub {
+    font-size: 20px;
+    margin-top: 18px;
+  }
+  .lp-hero-desc {
+    font-size: 14px;
+    margin-top: 12px;
+  }
+  .lp-hero-btns {
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 24px;
+  }
+  .lp-btn-primary {
+    padding: 15px 24px;
+    font-size: 15px;
+    text-align: center;
+  }
+  .lp-btn-secondary {
+    padding: 15px 24px;
+    font-size: 15px;
+    text-align: center;
+  }
+  .lp-cta-card {
+    padding: 36px 24px;
+  }
+  .lp-cta-title {
+    font-size: 20px;
+  }
+  .lp-cta-desc {
+    font-size: 13px;
+    margin-bottom: 28px;
+  }
+  .lp-cta-main {
+    font-size: 16px;
+    padding: 17px;
+  }
+  .lp-features {
+    grid-template-columns: 1fr;
+    padding: 0 20px 40px;
+    gap: 14px;
+  }
+  .lp-how {
+    padding: 0 20px 48px;
+  }
+  .lp-how-grid {
+    grid-template-columns: 1fr;
+    margin-top: 24px;
+  }
+  .lp-footer {
+    padding: 20px;
+    flex-direction: column;
+    gap: 14px;
+    text-align: center;
+  }
+  .lp-footer-links {
+    justify-content: center;
+  }
+}
