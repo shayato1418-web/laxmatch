@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/context/AuthContext";
+import { createClient } from "@/lib/supabase/client";
 
 const S = {
   bg: "#0B1120",
@@ -26,14 +27,17 @@ const LINKS = [
   { label: "空き日程",   href: "/availability" },
   { label: "マッチング", href: "/matches" },
   { label: "チャット",   href: "/chat" },
+  { label: "通知",       href: "/notifications" },
 ];
 
 export default function Sidebar({ active }: { active: string }) {
   const { user, logout } = useAuth();
+  const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
   const [notifOpen, setNotifOpen] = useState(false);
   const [dropTop, setDropTop] = useState(200);
   const [notifs, setNotifs] = useState<Notif[]>([]);
+  const [pendingCount, setPendingCount] = useState(0);
   const notifBtnRef = useRef<HTMLButtonElement>(null);
   const dropRef = useRef<HTMLDivElement>(null);
 
@@ -51,6 +55,32 @@ export default function Sidebar({ active }: { active: string }) {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [notifOpen]);
+
+  // Load pending match-request count
+  useEffect(() => {
+    if (!user?.id) return;
+    const uid = user.id;
+    supabase
+      .from("chat_rooms")
+      .select("id", { count: "exact", head: true })
+      .eq("team_b_id", uid)
+      .eq("status", "pending")
+      .then(({ count }) => setPendingCount(count ?? 0));
+
+    const ch = supabase
+      .channel("sidebar-pending")
+      .on("postgres_changes", { event: "*", schema: "public", table: "chat_rooms", filter: `team_b_id=eq.${uid}` }, () => {
+        supabase
+          .from("chat_rooms")
+          .select("id", { count: "exact", head: true })
+          .eq("team_b_id", uid)
+          .eq("status", "pending")
+          .then(({ count }) => setPendingCount(count ?? 0));
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const toggleNotif = () => {
     if (!notifOpen && notifBtnRef.current) {
@@ -101,6 +131,7 @@ export default function Sidebar({ active }: { active: string }) {
         <nav style={{ marginTop: 26, display: "flex", flexDirection: "column", gap: 4 }}>
           {LINKS.map((item) => {
             const isActive = active === item.href;
+            const badge = item.href === "/notifications" && pendingCount > 0 ? pendingCount : null;
             return (
               <Link key={item.label} href={item.href} style={{
                 background: isActive ? S.activeBg : "transparent",
@@ -116,38 +147,14 @@ export default function Sidebar({ active }: { active: string }) {
               }}>
                 <span style={{ width: 7, height: 7, borderRadius: 2, background: isActive ? S.accent : "transparent", flexShrink: 0 }} />
                 <span style={{ flex: 1 }}>{item.label}</span>
+                {badge !== null && (
+                  <span style={{ background: S.badge, color: "#fff", fontFamily: "'Roboto Mono', monospace", fontSize: 10, fontWeight: 700, borderRadius: 10, padding: "1px 7px" }}>
+                    {badge}
+                  </span>
+                )}
               </Link>
             );
           })}
-
-          {/* Notification button */}
-          <button
-            ref={notifBtnRef}
-            onClick={toggleNotif}
-            style={{
-              background: notifOpen ? S.activeBg : "transparent",
-              color: notifOpen ? "#fff" : S.muted,
-              display: "flex",
-              alignItems: "center",
-              gap: 11,
-              fontSize: 14,
-              fontWeight: 700,
-              padding: "12px 14px",
-              borderRadius: 10,
-              border: "none",
-              cursor: "pointer",
-              width: "100%",
-              textAlign: "left",
-            }}
-          >
-            <span style={{ width: 7, height: 7, borderRadius: 2, background: "transparent", flexShrink: 0 }} />
-            <span style={{ flex: 1 }}>通知</span>
-            {unreadCount > 0 && (
-              <span style={{ background: S.badge, color: "#fff", fontFamily: "'Roboto Mono', monospace", fontSize: 10, fontWeight: 700, borderRadius: 10, padding: "1px 7px" }}>
-                {unreadCount}
-              </span>
-            )}
-          </button>
 
           <Link href="/settings" style={{
             background: active === "/settings" ? S.activeBg : "transparent",

@@ -136,11 +136,12 @@ export default function ExplorePage() {
         team_b_id: target.user_id,
         team_a_name: user.name || "チームA",
         team_b_name: target.university_name || "チームB",
-        status: "active",
+        status: "pending",
+        requested_by: user.id,
       });
       if (!error) {
-        setRoomStatuses((m) => new Map(m).set(target.user_id, "matched"));
-        showToast("ok", "マッチング成立！チャットを開始できます", "/chat");
+        setRoomStatuses((m) => new Map(m).set(target.user_id, "applied"));
+        showToast("ok", "申請を送りました。相手の承認をお待ちください");
       } else {
         showToast("err", `申請に失敗しました: ${error.message}`);
       }

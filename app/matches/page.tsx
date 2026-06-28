@@ -21,6 +21,7 @@ const C = {
   cardLine: "#1B2238",
   green: "#25D07D",
   yellow: "#F7B731",
+  red: "#FF5C6C",
 } as const;
 
 const HUES = [
@@ -50,7 +51,7 @@ function fmtDate(iso: string): string {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
-type Tab = "成立" | "申請中";
+type Tab = "申請中" | "成立" | "却下";
 
 type DbRoom = {
   id: string;
@@ -62,13 +63,19 @@ type DbRoom = {
   created_at: string;
 };
 
+function statusMeta(status: string): { label: string; color: string; border: string } {
+  if (status === "active")   return { label: "成立",  color: C.green,  border: C.green };
+  if (status === "rejected") return { label: "却下",  color: C.red,    border: C.red };
+  return                            { label: "申請中", color: C.yellow, border: C.yellow };
+}
+
 export default function MatchesPage() {
   const { user } = useAuth();
   const supabase = useMemo(() => createClient(), []);
 
   const [rooms, setRooms] = useState<DbRoom[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<Tab>("成立");
+  const [tab, setTab] = useState<Tab>("申請中");
 
   const load = useCallback(async () => {
     if (!user?.id) return;
@@ -84,12 +91,23 @@ export default function MatchesPage() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const activeRooms = useMemo(() => rooms.filter((r) => r.status === "active"), [rooms]);
-  const pendingRooms = useMemo(() => rooms.filter((r) => r.status !== "active"), [rooms]);
-  const displayed = tab === "成立" ? activeRooms : pendingRooms;
+  const pendingRooms  = useMemo(() => rooms.filter((r) => r.status === "pending"),  [rooms]);
+  const activeRooms   = useMemo(() => rooms.filter((r) => r.status === "active"),   [rooms]);
+  const rejectedRooms = useMemo(() => rooms.filter((r) => r.status === "rejected"), [rooms]);
+
+  const displayed =
+    tab === "成立"  ? activeRooms  :
+    tab === "却下"  ? rejectedRooms :
+    pendingRooms;
 
   const opponentName = (r: DbRoom) =>
     r.team_a_id === user?.id ? r.team_b_name : r.team_a_name;
+
+  const TABS: { label: Tab; count: number }[] = [
+    { label: "申請中", count: pendingRooms.length },
+    { label: "成立",   count: activeRooms.length  },
+    { label: "却下",   count: rejectedRooms.length },
+  ];
 
   return (
     <div style={{ height: "100vh", display: "flex", background: C.bg, overflow: "hidden" }}>
@@ -114,21 +132,21 @@ export default function MatchesPage() {
               <div style={{ fontSize: 22, fontWeight: 900, marginTop: 3 }}>マッチング</div>
             </div>
             <div className="matches-tabs" style={{ display: "flex", gap: 8 }}>
-              {(["成立", "申請中"] as Tab[]).map((t) => (
+              {TABS.map(({ label, count }) => (
                 <button
-                  key={t}
-                  onClick={() => setTab(t)}
+                  key={label}
+                  onClick={() => setTab(label)}
                   style={{
                     fontSize: 13, fontWeight: 800, padding: "9px 16px", borderRadius: 10,
                     cursor: "pointer",
-                    background: t === tab ? C.accent : "#161E33",
-                    color: t === tab ? "#fff" : C.muted,
-                    border: t !== tab ? `1px solid ${C.border2}` : "none",
+                    background: label === tab ? C.accent : "#161E33",
+                    color: label === tab ? "#fff" : C.muted,
+                    border: label !== tab ? `1px solid ${C.border2}` : "none",
                   }}
                 >
-                  {t}
+                  {label}
                   <span style={{ marginLeft: 6, fontSize: 11, fontFamily: "'Roboto Mono', monospace" }}>
-                    {t === "成立" ? activeRooms.length : pendingRooms.length}
+                    {count}
                   </span>
                 </button>
               ))}
@@ -145,11 +163,15 @@ export default function MatchesPage() {
               <div style={{ textAlign: "center", padding: "60px 0", color: C.muted }}>
                 <div style={{ fontSize: 36, marginBottom: 14 }}>🏑</div>
                 <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 8 }}>
-                  {tab === "成立" ? "まだマッチングが成立していません" : "申請中のマッチングはありません"}
+                  {tab === "成立" ? "まだマッチングが成立していません" :
+                   tab === "却下" ? "却下されたマッチングはありません" :
+                   "申請中のマッチングはありません"}
                 </div>
-                <div style={{ fontSize: 13, color: C.labelColor ?? "#5A647F" }}>
+                <div style={{ fontSize: 13, color: "#5A647F" }}>
                   {tab === "成立"
-                    ? "空き日程を公開するとマッチングが自動で成立します"
+                    ? "探すページからチームに申請してみましょう"
+                    : tab === "却下"
+                    ? "新しいチームに申請してみましょう"
                     : "探すページからチームに申請してみましょう"}
                 </div>
               </div>
@@ -157,11 +179,10 @@ export default function MatchesPage() {
               <div className="matches-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 16 }}>
                 {displayed.map((r) => {
                   const name = opponentName(r);
-                  const isActive = r.status === "active";
+                  const meta = statusMeta(r.status);
                   return (
                     <div key={r.id} className="app-card" style={{ background: C.card, border: `1px solid ${C.cardBorder}`, borderRadius: 16, padding: 20, position: "relative", overflow: "hidden" }}>
-                      {/* Color left border */}
-                      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: isActive ? C.green : C.yellow }} />
+                      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: meta.color }} />
 
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                         <div style={{ display: "flex", gap: 13, alignItems: "center" }}>
@@ -171,27 +192,28 @@ export default function MatchesPage() {
                           <div>
                             <div style={{ fontSize: 17, fontWeight: 900 }}>{name}</div>
                             <div style={{ fontSize: 12, color: C.muted, marginTop: 2, fontFamily: "'Roboto Mono', monospace" }}>
-                              {fmtDate(r.created_at)} にマッチ
+                              {fmtDate(r.created_at)} に申請
                             </div>
                           </div>
                         </div>
                         <div style={{
                           fontFamily: "'Roboto Mono', monospace", fontSize: 11, fontWeight: 700,
-                          color: isActive ? C.green : C.yellow,
-                          border: `1px solid ${isActive ? C.green : C.yellow}`,
+                          color: meta.color, border: `1px solid ${meta.border}`,
                           borderRadius: 6, padding: "5px 9px", flexShrink: 0,
                         }}>
-                          {isActive ? "成立" : "申請中"}
+                          {meta.label}
                         </div>
                       </div>
 
                       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginTop: 16, paddingTop: 15, borderTop: `1px solid ${C.cardLine}` }}>
-                        {isActive ? (
+                        {r.status === "active" ? (
                           <Link href="/chat" style={{ fontSize: 13, fontWeight: 800, color: C.accent, textDecoration: "none" }}>
                             チャットへ ›
                           </Link>
-                        ) : (
+                        ) : r.status === "pending" ? (
                           <span style={{ fontSize: 12, color: C.muted }}>相手の承認待ち</span>
+                        ) : (
+                          <span style={{ fontSize: 12, color: C.red }}>却下されました</span>
                         )}
                       </div>
                     </div>

@@ -81,6 +81,7 @@ export default function ChatPage() {
   const [convs, setConvs] = useState<Conv[]>([]);
   const [activeIdx, setActiveIdx] = useState(0);
   const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
   const [mobileView, setMobileView] = useState<"list" | "chat">("list");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -159,22 +160,27 @@ export default function ChatPage() {
 
   const send = async () => {
     const t = draft.trim();
-    if (!t || !active?.confirmed || !user?.id) return;
+    if (!t || !active?.confirmed || !user?.id || sending) return;
+    setSending(true);
     setDraft("");
-    const { data, error } = await supabase
-      .from("messages")
-      .insert({ room_id: active.id, sender_id: user.id, content: t })
-      .select("id, created_at")
-      .single();
-    if (!error && data) {
-      const msg: Msg = { id: data.id, from: "me", text: t, time: fmtTime(data.created_at) };
-      setConvs((prev) =>
-        prev.map((c, i) =>
-          i === activeIdx
-            ? { ...c, messages: [...c.messages, msg], last: t, time: fmtTime(data.created_at) }
-            : c
-        )
-      );
+    try {
+      const { data, error } = await supabase
+        .from("messages")
+        .insert({ room_id: active.id, sender_id: user.id, content: t })
+        .select("id, created_at")
+        .single();
+      if (!error && data) {
+        const msg: Msg = { id: data.id, from: "me", text: t, time: fmtTime(data.created_at) };
+        setConvs((prev) =>
+          prev.map((c, i) =>
+            i === activeIdx
+              ? { ...c, messages: [...c.messages, msg], last: t, time: fmtTime(data.created_at) }
+              : c
+          )
+        );
+      }
+    } finally {
+      setSending(false);
     }
   };
 
@@ -340,13 +346,14 @@ export default function ChatPage() {
                     />
                     <button
                       onClick={send}
-                      disabled={!draft.trim()}
-                      className={draft.trim() ? "send-btn-active" : ""}
+                      disabled={!draft.trim() || sending}
+                      className={draft.trim() && !sending ? "send-btn-active" : ""}
                       style={{
                         width: 42, height: 42, borderRadius: "50%",
-                        background: draft.trim() ? C.accent : "#161E33",
+                        background: draft.trim() && !sending ? C.accent : "#161E33",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        color: "#fff", fontSize: 20, flexShrink: 0, cursor: draft.trim() ? "pointer" : "default",
+                        color: "#fff", fontSize: 20, flexShrink: 0,
+                        cursor: draft.trim() && !sending ? "pointer" : "default",
                         border: "none", fontWeight: 700,
                         transition: "background 0.15s",
                       }}
