@@ -23,10 +23,22 @@ export interface User {
   createdAt: string;
 }
 
+interface ImpersonationBackup {
+  adminUser: User;
+  session: {
+    access_token: string;
+    refresh_token: string;
+    expires_at: number;
+  };
+}
+
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
+  impersonation: ImpersonationBackup | null;
   login: (email: string, password: string) => Promise<void>;
+  impersonate: (email: string, password: string) => Promise<void>;
+  returnToAdmin: () => Promise<void>;
   register: (userData: Omit<User, 'id' | 'createdAt'> & { password: string }) => Promise<{ needsConfirmation: boolean }>;
   logout: () => Promise<void>;
   updateProfile: (updates: Partial<Pick<User, 'name' | 'area' | 'level' | 'lineId' | 'notes'>>) => Promise<void>;
@@ -58,7 +70,19 @@ function mapSupabaseUser(sbUser: SupabaseUser): User {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [impersonation, setImpersonation] = useState<ImpersonationBackup | null>(null);
   const supabase = createClient();
+
+  useEffect(() => {
+    const stored = localStorage.getItem("adminImpersonationBackup");
+    if (stored) {
+      try {
+        setImpersonation(JSON.parse(stored));
+      } catch {
+        localStorage.removeItem("adminImpersonationBackup");
+      }
+    }
+  }, []);
 
   useEffect(() => {
     // Subscribe to auth state — INITIAL_SESSION fires immediately with current session
@@ -75,6 +99,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string) => {
     setIsLoading(true);
     try {
+      const storedUsers = JSON.parse(localStorage.getItem('users') ?? '[]') as Array<any>;
+      const target = storedUsers.find((u) => u.email === email);
+      if (target?.status === 'suspended') {
+        throw new Error('このアカウントは停止されています');
+      }
+
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
         if (error.message.includes('Invalid login credentials')) {
@@ -85,6 +115,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         throw new Error(error.message);
       }
+
+      const now = new Date().toLocaleString('ja-JP', { hour12: false });
+      const updated = storedUsers.map((u) =>
+        u.email === email ? { ...u, lastLogin: now, status: u.status || 'active' } : u
+      );
+      localStorage.setItem('users', JSON.stringify(updated));
     } finally {
       setIsLoading(false);
     }
@@ -102,10 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           data: {
             name: userData.name,
             role: userData.role,
-            individualType: userData.individualType,
-            area: userData.area,
-            level: userData.level,
-            gender: userData.gender,
+          password: userData.password,
             memberCount: userData.memberCount,
             lineId: userData.lineId,
             notes: userData.notes,
@@ -128,9 +161,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             id: data.user.id,
             email: userData.email,
             name: userData.name,
+            password: userData.password,
             role: userData.role,
             area: userData.area ?? '',
-            createdAt: new Date().toISOString(),
+            registeredAt: new Date().toLocaleDateString('ja-JP'),
+            lastLogin: '—',
+            status: 'active',
+            flagged: false,
           });
           localStorage.setItem('users', JSON.stringify(stored));
         }
@@ -145,7 +182,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     await supabase.auth.signOut();
+    localStorage.removeItem('adminImpersonationBackup');
+    setImpersonation(null);
     setUser(null);
+  };
+
+  const impersonate = async (email: string, password: string) => {
+    if (!user) throw new Error('ログインしていません');
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session) {
+      throw new Error('現在の管理者セッションを取得できませんでした');
+    }
+
+    const backup: ImpersonationBackup = {
+      adminUser: user,
+      session: {
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+        expires_at: session.expires_at,
+      },
+    };
+    localStorage.setItem('adminImpersonationBackup', JSON.stringify(backup));
+
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      localStorage.removeItem('adminImpersonationBackup');
+      throw new Error(error.message);
+    }
+    setImpersonation(backup);
+  };
+
+  const returnToAdmin = async () => {
+    const stored = localStorage.getItem('adminImpersonationBackup');
+    if (!stored) return;
+    const backup = JSON.parse(stored) as ImpersonationBackup;
+    const { error } = await supabase.auth.setSession(backup.session as any);
+    if (error) {
+      throw new Error(error.message);
+    }
+    localStorage.removeItem('adminImpersonationBackup');
+    setImpersonation(null);
   };
 
   const updateProfile = async (
@@ -181,7 +257,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout, updateProfile, changePassword }}>
+    <AuthContext.Provider value={{ user, isLoading, impersonation, login, impersonate, returnToAdmin, register, logout, updateProfile, changePassword }}>
       {children}
     </AuthContext.Provider>
   );

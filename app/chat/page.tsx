@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
+import { useAuth } from "@/app/context/AuthContext";
+import { createClient } from "@/lib/supabase/client";
 
 const C = {
   bg: "#0A0F1F",
@@ -22,23 +24,61 @@ const C = {
   green: "#25D07D",
 } as const;
 
-type Msg = { from: "me" | "them"; text: string; time: string };
+const HUES = [
+  "linear-gradient(135deg, #4D5BFF, #3FC7FF)",
+  "linear-gradient(135deg, #25D07D, #1AB068)",
+  "linear-gradient(135deg, #FF5F57, #FF9500)",
+  "linear-gradient(135deg, #B44FFF, #7E22CE)",
+];
 
+function roomHue(id: string): string {
+  let n = 0;
+  for (let i = 0; i < id.length; i++) n = (n + id.charCodeAt(i)) & 0xffff;
+  return HUES[n % HUES.length];
+}
+
+function roomInitials(name: string): string {
+  const k = name.replace(/[ぁ-ん]+|[ァ-ン]+|[A-Za-z\s]/g, "").slice(0, 2);
+  return k || name.slice(0, 2).toUpperCase() || "??";
+}
+
+function fmtTime(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+type Msg = { id: string; from: "me" | "them"; text: string; time: string };
 type Conv = {
+  id: string;
   en: string;
   hue: string;
   uni: string;
   last: string;
   time: string;
-  unread?: string;
   confirmed: boolean;
   messages: Msg[];
 };
-
-const INIT_CONVS: Conv[] = [];
+type DbMsg = {
+  id: string;
+  room_id: string;
+  sender_id: string;
+  content: string;
+  created_at: string;
+};
+type DbRoom = {
+  id: string;
+  team_a_id: string;
+  team_b_id: string;
+  team_a_name: string;
+  team_b_name: string;
+  status: string;
+  messages?: DbMsg[];
+};
 
 export default function ChatPage() {
-  const [convs, setConvs] = useState<Conv[]>(INIT_CONVS);
+  const { user } = useAuth();
+  const supabase = useMemo(() => createClient(), []);
+  const [convs, setConvs] = useState<Conv[]>([]);
   const [activeIdx, setActiveIdx] = useState(0);
   const [draft, setDraft] = useState("");
   const [mobileView, setMobileView] = useState<"list" | "chat">("list");
@@ -47,24 +87,95 @@ export default function ChatPage() {
   const active = convs.length > 0 ? convs[activeIdx] : null;
 
   useEffect(() => {
-    if (active) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [active?.messages]);
+    if (active) messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active?.messages.length]);
 
-  const send = () => {
+  const mapRoom = useCallback((room: DbRoom, uid: string): Conv => {
+    const isA = room.team_a_id === uid;
+    const other = isA ? room.team_b_name : room.team_a_name;
+    const msgs = [...(room.messages ?? [])]
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+      .map((m): Msg => ({
+        id: m.id,
+        from: m.sender_id === uid ? "me" : "them",
+        text: m.content,
+        time: fmtTime(m.created_at),
+      }));
+    const last = msgs[msgs.length - 1];
+    return {
+      id: room.id,
+      en: roomInitials(other),
+      hue: roomHue(room.id),
+      uni: other,
+      last: last?.text ?? "",
+      time: last?.time ?? "",
+      confirmed: room.status === "active",
+      messages: msgs,
+    };
+  }, []);
+
+  // Load rooms + their messages on mount
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase
+      .from("chat_rooms")
+      .select("*, messages(*)")
+      .or(`team_a_id.eq.${user.id},team_b_id.eq.${user.id}`)
+      .then(({ data, error }) => {
+        if (error) { console.error("chat_rooms:", error); return; }
+        setConvs(((data ?? []) as DbRoom[]).map((r) => mapRoom(r, user.id)));
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  // Realtime: append incoming messages
+  useEffect(() => {
+    if (!user?.id) return;
+    const uid = user.id;
+    const ch = supabase
+      .channel("chat-msgs")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
+        const m = payload.new as DbMsg;
+        setConvs((prev) => {
+          const i = prev.findIndex((c) => c.id === m.room_id);
+          if (i === -1) return prev;
+          if (prev[i].messages.some((x) => x.id === m.id)) return prev;
+          const msg: Msg = {
+            id: m.id,
+            from: m.sender_id === uid ? "me" : "them",
+            text: m.content,
+            time: fmtTime(m.created_at),
+          };
+          const next = [...prev];
+          next[i] = { ...next[i], messages: [...next[i].messages, msg], last: m.content, time: fmtTime(m.created_at) };
+          return next;
+        });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  const send = async () => {
     const t = draft.trim();
-    if (!t || !active?.confirmed) return;
-    const now = new Date();
-    const timeStr = `${now.getHours()}:${String(now.getMinutes()).padStart(2, "0")}`;
-    setConvs((prev) =>
-      prev.map((c, i) =>
-        i === activeIdx
-          ? { ...c, messages: [...c.messages, { from: "me", text: t, time: timeStr }], last: t, time: timeStr }
-          : c
-      )
-    );
+    if (!t || !active?.confirmed || !user?.id) return;
     setDraft("");
+    const { data, error } = await supabase
+      .from("messages")
+      .insert({ room_id: active.id, sender_id: user.id, content: t })
+      .select("id, created_at")
+      .single();
+    if (!error && data) {
+      const msg: Msg = { id: data.id, from: "me", text: t, time: fmtTime(data.created_at) };
+      setConvs((prev) =>
+        prev.map((c, i) =>
+          i === activeIdx
+            ? { ...c, messages: [...c.messages, msg], last: t, time: fmtTime(data.created_at) }
+            : c
+        )
+      );
+    }
   };
 
   return (
@@ -98,7 +209,7 @@ export default function ChatPage() {
             ) : (
               convs.map((c, i) => (
                 <button
-                  key={c.uni}
+                  key={c.id}
                   onClick={() => { setActiveIdx(i); setMobileView("chat"); }}
                   style={{
                     width: "100%", display: "flex", gap: 12, padding: "15px 18px",
@@ -126,11 +237,6 @@ export default function ChatPage() {
                       {c.confirmed ? c.last : "🔒 マッチング成立後に開放"}
                     </div>
                   </div>
-                  {c.unread && c.confirmed && (
-                    <div style={{ background: C.accent, color: "#fff", fontFamily: "'Roboto Mono', monospace", fontSize: 10, fontWeight: 700, borderRadius: 10, padding: "1px 7px", flexShrink: 0 }}>
-                      {c.unread}
-                    </div>
-                  )}
                 </button>
               ))
             )}
@@ -192,10 +298,10 @@ export default function ChatPage() {
                 <>
                   {/* Messages */}
                   <div className="app-scroll" style={{ flex: 1, overflowY: "auto", padding: "22px 28px", display: "flex", flexDirection: "column", gap: 8 }}>
-                    {active.messages.map((msg, i) => {
+                    {active.messages.map((msg) => {
                       const isMe = msg.from === "me";
                       return (
-                        <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: isMe ? "flex-end" : "flex-start", gap: 3 }}>
+                        <div key={msg.id} style={{ display: "flex", flexDirection: "column", alignItems: isMe ? "flex-end" : "flex-start", gap: 3 }}>
                           <div style={{
                             maxWidth: "66%",
                             padding: "11px 15px",

@@ -270,11 +270,18 @@ function Dashboard({ users, matches }: { users: AdminUser[]; matches: Match[] })
 
 // ─── Section ②: User Management ──────────────────────────────────────────────
 function UserManagement({ users, setUsers }: { users: AdminUser[]; setUsers: Dispatch<SetStateAction<AdminUser[]>> }) {
-  const [showPw, setShowPw] = useState<Set<string>>(new Set());
+  const { impersonation, impersonate } = useAuth();
   const [search, setSearch] = useState("");
+  const [passwordModalUserId, setPasswordModalUserId] = useState<string | null>(null);
+  const [passwordVisible, setPasswordVisible] = useState(false);
 
-  const togglePw = (id: string) =>
-    setShowPw((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+  const openPasswordModal = (id: string) => {
+    setPasswordModalUserId(id);
+    setPasswordVisible(false);
+  };
+  const closePasswordModal = () => setPasswordModalUserId(null);
+  const passwordModalUser = users.find((u) => u.id === passwordModalUserId) ?? null;
+
   const setStatus = (id: string, status: UserStatus) =>
     setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, status } : u)));
   const toggleFlag = (id: string) =>
@@ -282,6 +289,22 @@ function UserManagement({ users, setUsers }: { users: AdminUser[]; setUsers: Dis
   const deleteUser = (id: string) => {
     if (!window.confirm("このユーザーを削除しますか？")) return;
     setUsers((prev) => prev.filter((u) => u.id !== id));
+  };
+
+  const handleImpersonate = async (id: string) => {
+    const user = users.find((u) => u.id === id);
+    if (!user) return;
+    if (user.role === "manager") {
+      window.alert("管理人アカウントの代理ログインはできません");
+      return;
+    }
+    try {
+      await impersonate(user.email, user.password);
+      window.alert(`代理ログイン中: ${user.name}`);
+      window.location.reload();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "代理ログインに失敗しました");
+    }
   };
 
   const filtered = users.filter(
@@ -336,10 +359,10 @@ function UserManagement({ users, setUsers }: { users: AdminUser[]; setUsers: Dis
                 <td style={{ padding: "11px 14px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <span style={{ fontSize: 12, fontFamily: "'Roboto Mono', monospace", color: C.muted, letterSpacing: 1 }}>
-                      {showPw.has(u.id) ? u.password : "••••••••"}
+                      {"••••••••"}
                     </span>
-                    <button onClick={() => togglePw(u.id)} style={{ fontSize: 10, color: C.accent, background: "none", border: "none", cursor: "pointer", padding: "2px 4px", fontWeight: 700 }}>
-                      {showPw.has(u.id) ? "隠す" : "表示"}
+                    <button onClick={() => openPasswordModal(u.id)} style={{ fontSize: 10, color: C.accent, background: "none", border: "none", cursor: "pointer", padding: "2px 4px", fontWeight: 700 }}>
+                      パスワード表示
                     </button>
                   </div>
                 </td>
@@ -349,11 +372,12 @@ function UserManagement({ users, setUsers }: { users: AdminUser[]; setUsers: Dis
                   <Badge label={u.status === "active" ? "有効" : u.status === "suspended" ? "停止中" : "フラグ"} color={statusColor(u.status)} />
                 </td>
                 <td style={{ padding: "11px 14px" }}>
-                  <div style={{ display: "flex", gap: 4 }}>
+                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                     {u.status !== "suspended"
                       ? <Btn label="停止" color={C.yellow} onClick={() => setStatus(u.id, "suspended")} small />
                       : <Btn label="再開" color={C.green}  onClick={() => setStatus(u.id, "active")}    small />
                     }
+                    <Btn label="代理ログイン" color={C.accent} onClick={() => handleImpersonate(u.id)} small disabled={impersonation !== null || u.role === "manager"} />
                     <Btn label={u.flagged ? "🚩解除" : "🚩"} color={C.orange} onClick={() => toggleFlag(u.id)} small />
                     <Btn label="削除" color={C.red} onClick={() => deleteUser(u.id)} small />
                   </div>
@@ -780,7 +804,7 @@ type SectionId = (typeof NAV)[number]["id"];
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function AdminPage() {
-  const { user, isLoading, logout } = useAuth();
+  const { user, isLoading, logout, impersonation, returnToAdmin } = useAuth();
   const router = useRouter();
   const [section, setSection] = useState<SectionId>("dashboard");
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -821,11 +845,6 @@ export default function AdminPage() {
     <div style={{ height: "100vh", display: "flex", background: C.bg, overflow: "hidden" }}>
       {/* Chrome bar */}
       <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: 42, background: "#0B1120", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", padding: "0 16px", gap: 10, zIndex: 50 }}>
-        <div style={{ display: "flex", gap: 7 }}>
-          {["#FF5F57", "#FEBC2E", "#28C840"].map((c) => (
-            <div key={c} style={{ width: 11, height: 11, borderRadius: "50%", background: c }} />
-          ))}
-        </div>
         <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
           <div style={{ minWidth: 360, background: "#161E33", border: `1px solid ${C.b2}`, borderRadius: 8, padding: "6px 16px", fontFamily: "'Roboto Mono', monospace", fontSize: 11, color: C.muted, textAlign: "center" }}>
             laxmatch.jp/admin
@@ -888,6 +907,27 @@ export default function AdminPage() {
 
         {/* Main content */}
         <main style={{ flex: 1, overflowY: "auto", padding: "28px 32px" }}>
+          {impersonation && (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, background: "#4D1E00", color: "#FFF6E1", border: "1px solid #D88A1E", borderRadius: 14, padding: "14px 18px", marginBottom: 18 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, fontWeight: 700 }}>
+                <span>⚠️ 代理ログイン中：</span>
+                <span>{user.name}</span>
+              </div>
+              <button
+                onClick={async () => {
+                  try {
+                    await returnToAdmin();
+                    window.location.reload();
+                  } catch (err) {
+                    window.alert(err instanceof Error ? err.message : "管理人セッションへの復元に失敗しました");
+                  }
+                }}
+                style={{ background: C.red, color: "#fff", border: "none", borderRadius: 10, padding: "10px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
+              >
+                管理人に戻る
+              </button>
+            </div>
+          )}
           {section === "dashboard"     && <Dashboard users={users} matches={matches} />}
           {section === "users"         && <UserManagement users={users} setUsers={setUsers} />}
           {section === "matches"       && <MatchManagement matches={matches} setMatches={setMatches} />}

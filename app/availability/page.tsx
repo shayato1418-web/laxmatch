@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import { useAuth } from "@/app/context/AuthContext";
+import { createClient } from "@/lib/supabase/client";
 
 const C = {
   bg: "#0A0F1F",
@@ -51,36 +52,49 @@ function cellBg(st: SlotState): React.CSSProperties {
 
 export default function AvailabilityPage() {
   const { user } = useAuth();
+  const supabase = useMemo(() => createClient(), []);
   const [grid, setGrid] = useState<SlotState[][]>(mkGrid);
   const [flash, setFlash] = useState<`${number}-${number}` | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!user?.id) return;
-    const saved = localStorage.getItem(`availability-${user.id}`);
-    if (!saved) return;
-    try {
-      const parsed = JSON.parse(saved) as SlotState[][];
-      if (Array.isArray(parsed) && parsed.length === TIME_SLOTS.length) {
-        setGrid(parsed);
-      }
-    } catch {
-      // ignore invalid saved data
-    }
+    supabase
+      .from("availability_slots")
+      .select("slot_key, state")
+      .eq("user_id", user.id)
+      .then(({ data, error }) => {
+        if (error || !data) return;
+        setGrid((g) => {
+          const next = g.map((r) => [...r]);
+          (data as { slot_key: string; state: SlotState }[]).forEach(({ slot_key, state }) => {
+            const [si, di] = slot_key.split("-").map(Number);
+            if (si >= 0 && si < TIME_SLOTS.length && di >= 0 && di < DAYS.length) {
+              next[si][di] = state;
+            }
+          });
+          return next;
+        });
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  useEffect(() => {
-    if (!user?.id) return;
-    localStorage.setItem(`availability-${user.id}`, JSON.stringify(grid));
-  }, [grid, user?.id]);
-
   const toggle = (si: number, di: number) => {
+    const newState: SlotState = grid[si][di] === "none" ? "free" : grid[si][di] === "free" ? "busy" : "none";
     setGrid((g) => {
       const next = g.map((r) => [...r]);
-      const cur = next[si][di];
-      next[si][di] = cur === "none" ? "free" : cur === "free" ? "busy" : "none";
+      next[si][di] = newState;
       return next;
     });
+    if (user?.id) {
+      supabase
+        .from("availability_slots")
+        .upsert(
+          { user_id: user.id, slot_key: `${si}-${di}`, state: newState },
+          { onConflict: "user_id,slot_key" }
+        )
+        .then(({ error }) => { if (error) console.error("availability save:", error); });
+    }
     const key = `${si}-${di}` as const;
     setFlash(key);
     if (timerRef.current) clearTimeout(timerRef.current);
