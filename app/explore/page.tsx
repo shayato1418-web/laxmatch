@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
+import { useAuth } from "@/app/context/AuthContext";
+import { createClient } from "@/lib/supabase/client";
 
 const C = {
   bg: "#0A0F1F",
@@ -17,62 +19,129 @@ const C = {
   cardBorder: "#1F2740",
   deep: "#0C1222",
   labelColor: "#5A647F",
+  green: "#25D07D",
 } as const;
 
-const CHIP_BORDER = "#232C45";
+const HUES = [
+  "linear-gradient(135deg,#4D5BFF,#A67CFF)",
+  "linear-gradient(135deg,#FF5C6C,#FF9870)",
+  "linear-gradient(135deg,#00C9A7,#3FC7FF)",
+  "linear-gradient(135deg,#F7B731,#FC6D26)",
+  "linear-gradient(135deg,#A18CD1,#FBC2EB)",
+  "linear-gradient(135deg,#30CFD0,#330867)",
+  "linear-gradient(135deg,#F953C6,#B91D73)",
+  "linear-gradient(135deg,#2AF598,#009EFD)",
+];
 
-type Team = {
-  uni: string;
-  sub: string;
-  en: string;
-  league: string;
-  area: string;
-  date: string;
-  dist: string;
-  hue: string;
+function teamHue(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return HUES[h % HUES.length];
+}
+
+function teamInitials(name: string): string {
+  const cleaned = name.replace(/大学|ラクロス|部$/g, "");
+  return cleaned.slice(0, 2).toUpperCase() || name.slice(0, 2).toUpperCase();
+}
+
+type Profile = {
+  user_id: string;
+  university_name: string;
+  gender: string;
+  region: string;
+  level: string;
+  line_id: string;
+  notes: string;
+  is_public: boolean;
 };
 
-const TEAMS: Team[] = [];
-
-type Filter = { region: string; month: string; level: string; format: string };
-
-const INITIAL: Filter = { region: "関東", month: "", level: "", format: "" };
+type RoomStatus = "applied" | "matched" | null;
 
 export default function ExplorePage() {
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<Filter>(INITIAL);
-  const [applied, setApplied] = useState<Set<string>>(new Set());
+  const { user } = useAuth();
+  const supabase = useMemo(() => createClient(), []);
 
-  const teams = useMemo(() => {
-    return TEAMS.filter((t) => {
-      if (search && !t.uni.includes(search) && !t.area.includes(search)) return false;
-      if (filter.month && !t.date.startsWith(filter.month.replace("月", "/"))) return false;
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [roomStatuses, setRoomStatuses] = useState<Map<string, RoomStatus>>(new Map());
+  const [applying, setApplying] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [filterRegion, setFilterRegion] = useState("");
+  const [filterLevel, setFilterLevel] = useState("");
+
+  const load = useCallback(async () => {
+    if (!user?.id) return;
+    setLoading(true);
+    try {
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("is_public", true)
+        .neq("user_id", user.id);
+
+      if (profs) {
+        setProfiles(profs as Profile[]);
+
+        // Check existing rooms for each profile
+        const ids = profs.map((p: Profile) => p.user_id);
+        if (ids.length > 0) {
+          const [{ data: roomsAB }, { data: roomsBA }] = await Promise.all([
+            supabase.from("chat_rooms").select("id, team_b_id, status").eq("team_a_id", user.id),
+            supabase.from("chat_rooms").select("id, team_a_id, status").eq("team_b_id", user.id),
+          ]);
+
+          const statusMap = new Map<string, RoomStatus>();
+          (roomsAB ?? []).forEach((r: { team_b_id: string; status: string }) => {
+            if (ids.includes(r.team_b_id)) {
+              statusMap.set(r.team_b_id, r.status === "active" ? "matched" : "applied");
+            }
+          });
+          (roomsBA ?? []).forEach((r: { team_a_id: string; status: string }) => {
+            if (ids.includes(r.team_a_id)) {
+              statusMap.set(r.team_a_id, r.status === "active" ? "matched" : "applied");
+            }
+          });
+          setRoomStatuses(statusMap);
+        }
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id, supabase]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const handleApply = async (target: Profile) => {
+    if (!user?.id || applying.has(target.user_id)) return;
+    setApplying((s) => new Set([...s, target.user_id]));
+    try {
+      const { error } = await supabase.from("chat_rooms").insert({
+        team_a_id: user.id,
+        team_b_id: target.user_id,
+        team_a_name: user.name || "チームA",
+        team_b_name: target.university_name || "チームB",
+        status: "locked",
+      });
+      if (!error) {
+        setRoomStatuses((m) => new Map(m).set(target.user_id, "applied"));
+      }
+    } finally {
+      setApplying((s) => { const ns = new Set(s); ns.delete(target.user_id); return ns; });
+    }
+  };
+
+  // Derived filter data
+  const regions = useMemo(() => [...new Set(profiles.map((p) => p.region).filter(Boolean))], [profiles]);
+  const levels = useMemo(() => [...new Set(profiles.map((p) => p.level).filter(Boolean))], [profiles]);
+
+  const filtered = useMemo(() => {
+    return profiles.filter((p) => {
+      if (search && !p.university_name.includes(search) && !p.region.includes(search)) return false;
+      if (filterRegion && p.region !== filterRegion) return false;
+      if (filterLevel && p.level !== filterLevel) return false;
       return true;
     });
-  }, [search, filter]);
-
-  const toggle = (uni: string) =>
-    setApplied((prev) => { const s = new Set(prev); s.has(uni) ? s.delete(uni) : s.add(uni); return s; });
-
-  const chip = (label: string, key: keyof Filter, val: string) => {
-    const active = filter[key] === val;
-    return (
-      <button
-        key={label}
-        onClick={() => setFilter((f) => ({ ...f, [key]: active ? "" : val }))}
-        className={active ? "chip-active" : ""}
-        style={{
-          background: active ? C.accent : "#161E33",
-          color: active ? "#fff" : C.dim,
-          fontSize: 13, fontWeight: 700, padding: "9px 16px", borderRadius: 20,
-          border: active ? "none" : `1px solid ${CHIP_BORDER}`,
-          cursor: "pointer",
-        }}
-      >
-        {label} ▾
-      </button>
-    );
-  };
+  }, [profiles, search, filterRegion, filterLevel]);
 
   return (
     <div style={{ height: "100vh", display: "flex", background: C.bg, overflow: "hidden" }}>
@@ -96,7 +165,9 @@ export default function ExplorePage() {
               <div style={{ fontFamily: "'Roboto Mono', monospace", fontSize: 10, letterSpacing: 2, color: C.accent, fontWeight: 700 }}>FIND OPPONENT</div>
               <div style={{ fontSize: 22, fontWeight: 900, marginTop: 3 }}>
                 相手を探す
-                <span style={{ fontSize: 13, color: C.muted, fontWeight: 600, marginLeft: 10 }}>{teams.length}チームが募集中</span>
+                <span style={{ fontSize: 13, color: C.muted, fontWeight: 600, marginLeft: 10 }}>
+                  {loading ? "読み込み中…" : `${filtered.length}チームが募集中`}
+                </span>
               </div>
             </div>
             <input
@@ -108,75 +179,99 @@ export default function ExplorePage() {
           </div>
 
           {/* Filter chips */}
-          <div style={{ display: "flex", gap: 10, padding: "18px 28px", borderBottom: `1px solid #141B2E`, flexShrink: 0, alignItems: "center" }}>
-            {chip("関東", "region", "関東")}
-            {chip("7月", "month", "7月")}
-            {chip("レベル", "level", "上級")}
-            {chip("形式", "format", "全面")}
-            <div style={{ marginLeft: "auto", fontFamily: "'Roboto Mono', monospace", fontSize: 12, color: C.muted }}>
-              並び替え : 距離が近い順 ▾
-            </div>
+          <div style={{ display: "flex", gap: 10, padding: "14px 28px", borderBottom: `1px solid #141B2E`, flexShrink: 0, alignItems: "center", flexWrap: "wrap" }}>
+            {regions.map((r) => {
+              const active = filterRegion === r;
+              return (
+                <button key={r} onClick={() => setFilterRegion(active ? "" : r)} style={{ background: active ? C.accent : "#161E33", color: active ? "#fff" : C.dim, fontSize: 13, fontWeight: 700, padding: "8px 14px", borderRadius: 20, border: active ? "none" : `1px solid ${C.border2}`, cursor: "pointer" }}>
+                  {r}
+                </button>
+              );
+            })}
+            {levels.map((l) => {
+              const active = filterLevel === l;
+              return (
+                <button key={l} onClick={() => setFilterLevel(active ? "" : l)} style={{ background: active ? "#3FC7FF" : "#161E33", color: active ? "#fff" : C.dim, fontSize: 13, fontWeight: 700, padding: "8px 14px", borderRadius: 20, border: active ? "none" : `1px solid ${C.border2}`, cursor: "pointer" }}>
+                  {l}
+                </button>
+              );
+            })}
+            {(filterRegion || filterLevel) && (
+              <button onClick={() => { setFilterRegion(""); setFilterLevel(""); }} style={{ background: "transparent", color: C.muted, fontSize: 12, padding: "8px 12px", borderRadius: 20, border: `1px solid ${C.border2}`, cursor: "pointer" }}>
+                ✕ リセット
+              </button>
+            )}
           </div>
 
           {/* Grid */}
           <div className="app-scroll" style={{ flex: 1, overflowY: "auto", padding: "22px 28px" }}>
-            <div className="explore-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}>
-              {teams.map((t) => (
-                <div key={t.uni} className="app-card" style={{ background: C.card, border: `1px solid ${C.cardBorder}`, borderRadius: 16, padding: 18 }}>
-                  <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                    <div style={{ width: 48, height: 48, borderRadius: 13, background: t.hue, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Archivo', sans-serif", fontWeight: 900, fontSize: 14, color: "#fff", flexShrink: 0, letterSpacing: -0.5 }}>
-                      {t.en}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 16, fontWeight: 900 }}>{t.uni}</div>
-                      <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{t.sub}</div>
-                    </div>
-                  </div>
-
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14 }}>
-                    <span style={{ fontFamily: "'Roboto Mono', monospace", fontSize: 10, color: C.accent, fontWeight: 700, border: `1px solid #2C3658`, borderRadius: 6, padding: "4px 8px" }}>
-                      {t.league}
-                    </span>
-                    <span style={{ fontSize: 11.5, color: C.muted }}>{t.area}</span>
-                  </div>
-
-                  <div style={{ display: "flex", gap: 8, marginTop: 14, fontFamily: "'Roboto Mono', monospace", fontSize: 10.5 }}>
-                    <div style={{ flex: 1, background: C.deep, borderRadius: 8, padding: "9px 10px" }}>
-                      <div style={{ color: C.labelColor, fontSize: 9, letterSpacing: 1 }}>希望日</div>
-                      <div style={{ color: C.dim, marginTop: 3, fontWeight: 600 }}>{t.date}</div>
-                    </div>
-                    <div style={{ background: C.deep, borderRadius: 8, padding: "9px 10px" }}>
-                      <div style={{ color: C.labelColor, fontSize: 9, letterSpacing: 1 }}>距離</div>
-                      <div style={{ color: C.dim, marginTop: 3, fontWeight: 600 }}>{t.dist}</div>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => toggle(t.uni)}
-                    className={applied.has(t.uni) ? "" : "gradient-btn"}
-                    style={{
-                      display: "block", width: "100%", marginTop: 14,
-                      background: applied.has(t.uni) ? "#25D07D" : C.accent,
-                      color: "#fff", textAlign: "center", padding: 12,
-                      borderRadius: 11, fontWeight: 800, fontSize: 13.5,
-                      border: "none", cursor: "pointer",
-                    }}
-                  >
-                    {applied.has(t.uni) ? "✓ 申請済み" : "マッチ申請"}
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            {teams.length === 0 && (
+            {loading ? (
+              <div style={{ textAlign: "center", padding: "80px 0", color: C.muted }}>
+                <div style={{ fontSize: 32, marginBottom: 12 }}>⟳</div>
+                <div style={{ fontSize: 14 }}>読み込み中…</div>
+              </div>
+            ) : filtered.length === 0 ? (
               <div style={{ textAlign: "center", padding: "80px 0", color: C.muted }}>
                 <div style={{ fontSize: 40, marginBottom: 16 }}>🏑</div>
                 <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 8 }}>
-                  {TEAMS.length === 0 ? "まだ募集中のチームはありません" : "条件に合うチームが見つかりません"}
+                  {profiles.length === 0 ? "まだ募集中のチームはありません" : "条件に合うチームが見つかりません"}
                 </div>
                 <div style={{ fontSize: 13, color: C.labelColor }}>
-                  {TEAMS.length === 0 ? "チームが登録されると、ここに表示されます" : "検索条件を変更してみてください"}
+                  {profiles.length === 0 ? "チームが空き日程を公開すると、ここに表示されます" : "検索条件を変更してみてください"}
                 </div>
+              </div>
+            ) : (
+              <div className="explore-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}>
+                {filtered.map((p) => {
+                  const status = roomStatuses.get(p.user_id);
+                  const isApplying = applying.has(p.user_id);
+                  return (
+                    <div key={p.user_id} className="app-card" style={{ background: C.card, border: `1px solid ${C.cardBorder}`, borderRadius: 16, padding: 18 }}>
+                      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                        <div style={{ width: 48, height: 48, borderRadius: 13, background: teamHue(p.user_id), display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Archivo', sans-serif", fontWeight: 900, fontSize: 14, color: "#fff", flexShrink: 0, letterSpacing: -0.5 }}>
+                          {teamInitials(p.university_name)}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 15, fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.university_name}</div>
+                          <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{p.gender || "—"}</div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+                        {p.level && (
+                          <span style={{ fontFamily: "'Roboto Mono', monospace", fontSize: 10, color: C.accent, fontWeight: 700, border: `1px solid #2C3658`, borderRadius: 6, padding: "4px 8px" }}>
+                            {p.level}
+                          </span>
+                        )}
+                        {p.region && (
+                          <span style={{ fontSize: 11.5, color: C.muted }}>{p.region}</span>
+                        )}
+                      </div>
+
+                      {p.notes && (
+                        <div style={{ marginTop: 10, fontSize: 12, color: C.muted, background: C.deep, borderRadius: 8, padding: "8px 10px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {p.notes}
+                        </div>
+                      )}
+
+                      <button
+                        onClick={() => { void handleApply(p); }}
+                        disabled={!!status || isApplying}
+                        style={{
+                          display: "block", width: "100%", marginTop: 14,
+                          background: status === "matched" ? C.green : status === "applied" ? "#2A3448" : C.accent,
+                          color: "#fff", textAlign: "center", padding: 12,
+                          borderRadius: 11, fontWeight: 800, fontSize: 13.5,
+                          border: status === "applied" ? `1px solid ${C.border2}` : "none",
+                          cursor: status || isApplying ? "default" : "pointer",
+                          opacity: isApplying ? 0.6 : 1,
+                        }}
+                      >
+                        {isApplying ? "申請中…" : status === "matched" ? "✓ マッチ成立" : status === "applied" ? "申請済み" : "マッチ申請"}
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

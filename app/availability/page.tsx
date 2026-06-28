@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import Sidebar from "@/components/Sidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import { useAuth } from "@/app/context/AuthContext";
@@ -56,24 +57,31 @@ function cellBg(st: SlotState): React.CSSProperties {
 export default function AvailabilityPage() {
   const { user } = useAuth();
   const supabase = useMemo(() => createClient(), []);
+
   const [grid, setGrid] = useState<SlotState[][]>(mkGrid);
   const [flash, setFlash] = useState<`${number}-${number}` | null>(null);
   const [savingCells, setSavingCells] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<Toast | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [isPublished, setIsPublished] = useState(false);
+  const [newMatchCount, setNewMatchCount] = useState(0);
+
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showToast = useCallback((type: "ok" | "err", text: string) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast({ id: Date.now(), type, text });
-    toastTimer.current = setTimeout(() => setToast(null), type === "ok" ? 1500 : 3000);
+    toastTimer.current = setTimeout(() => setToast(null), type === "ok" ? 1800 : 3500);
   }, []);
 
-  // Load from Supabase on mount
+  // Load slots + current publish state from Supabase
   useEffect(() => {
     if (!user?.id) return;
     console.log("[availability] loading for user:", user.id);
+
+    // Load availability slots
     supabase
       .from("availability_slots")
       .select("slot_key, state")
@@ -84,60 +92,56 @@ export default function AvailabilityPage() {
           setLoadError(`読み込みエラー: ${error.message}`);
           return;
         }
-        if (!data || data.length === 0) {
-          console.log("[availability] no saved data");
-          return;
-        }
+        if (!data || data.length === 0) return;
         console.log("[availability] loaded", data.length, "slots");
         setGrid((g) => {
           const next = g.map((r) => [...r]);
           (data as { slot_key: string; state: SlotState }[]).forEach(({ slot_key, state }) => {
-            const parts = slot_key.split("-");
-            const si = Number(parts[0]);
-            const di = Number(parts[1]);
-            if (
-              !isNaN(si) && !isNaN(di) &&
-              si >= 0 && si < TIME_SLOTS.length &&
-              di >= 0 && di < DAYS.length
-            ) {
+            const [si, di] = slot_key.split("-").map(Number);
+            if (!isNaN(si) && !isNaN(di) && si >= 0 && si < TIME_SLOTS.length && di >= 0 && di < DAYS.length) {
               next[si][di] = state;
             }
           });
           return next;
         });
       });
+
+    // Load current publish state
+    supabase
+      .from("profiles")
+      .select("is_public")
+      .eq("user_id", user.id)
+      .single()
+      .then(({ data }) => {
+        if (data?.is_public) setIsPublished(true);
+      });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
+  // Toggle cell state with Supabase persistence
   const toggle = async (si: number, di: number) => {
     const key = `${si}-${di}`;
-
     console.log("[availability] toggle", { si, di, current: grid[si][di], userId: user?.id });
 
     const prevState = grid[si][di];
     const newState: SlotState = prevState === "none" ? "free" : prevState === "free" ? "busy" : "none";
 
-    // Optimistic UI update
     setGrid((g) => {
       const next = g.map((r) => [...r]);
       next[si][di] = newState;
       return next;
     });
 
-    // Flash animation
     setFlash(key as `${number}-${number}`);
     if (flashTimer.current) clearTimeout(flashTimer.current);
     flashTimer.current = setTimeout(() => setFlash(null), 400);
 
     if (!user?.id) {
-      console.warn("[availability] no user ID, UI updated but not saved");
       showToast("err", "ログインが必要です");
       return;
     }
 
     setSavingCells((s) => new Set([...s, key]));
-
-    console.log("[availability] upsert", { user_id: user.id, slot_key: key, state: newState });
 
     const { error } = await supabase
       .from("availability_slots")
@@ -146,16 +150,11 @@ export default function AvailabilityPage() {
         { onConflict: "user_id,slot_key" }
       );
 
-    setSavingCells((s) => {
-      const ns = new Set(s);
-      ns.delete(key);
-      return ns;
-    });
+    setSavingCells((s) => { const ns = new Set(s); ns.delete(key); return ns; });
 
     if (error) {
       console.error("[availability] save error:", error.code, error.message, error.details, error.hint);
       showToast("err", `保存に失敗しました (${error.code ?? error.message})`);
-      // Revert to previous state
       setGrid((g) => {
         const next = g.map((r) => [...r]);
         next[si][di] = prevState;
@@ -164,6 +163,119 @@ export default function AvailabilityPage() {
     } else {
       console.log("[availability] saved:", key, "→", newState);
       showToast("ok", "保存しました");
+    }
+  };
+
+  // Publish: set is_public=true, then auto-match with other public users
+  const handlePublish = async () => {
+    if (!user?.id || publishing) return;
+    setPublishing(true);
+    console.log("[publish] starting for user:", user.id);
+
+    try {
+      // 1. Upsert profile with is_public = true
+      const { error: profErr } = await supabase
+        .from("profiles")
+        .upsert(
+          {
+            user_id: user.id,
+            university_name: user.name || "",
+            gender: user.gender || "",
+            region: user.area || "",
+            level: user.level || "",
+            line_id: user.lineId || "",
+            notes: user.notes || "",
+            is_public: true,
+          },
+          { onConflict: "user_id" }
+        );
+
+      if (profErr) {
+        console.error("[publish] profile upsert error:", profErr);
+        showToast("err", `公開に失敗しました: ${profErr.message}`);
+        return;
+      }
+
+      setIsPublished(true);
+      console.log("[publish] profile set to public");
+
+      // 2. Get my free slots
+      const { data: mySlots } = await supabase
+        .from("availability_slots")
+        .select("slot_key")
+        .eq("user_id", user.id)
+        .eq("state", "free");
+
+      if (!mySlots || mySlots.length === 0) {
+        showToast("ok", "公開しました（空きスロットを登録するとマッチングが開始されます）");
+        return;
+      }
+
+      const mySlotSet = new Set(mySlots.map((s: { slot_key: string }) => s.slot_key));
+      console.log("[publish] my free slots:", mySlotSet.size);
+
+      // 3. Get other public users
+      const { data: others } = await supabase
+        .from("profiles")
+        .select("user_id, university_name")
+        .eq("is_public", true)
+        .neq("user_id", user.id);
+
+      if (!others || others.length === 0) {
+        showToast("ok", "公開しました（まだマッチング相手がいません）");
+        return;
+      }
+
+      console.log("[publish] other public users:", others.length);
+      let newMatches = 0;
+
+      for (const other of others as { user_id: string; university_name: string }[]) {
+        // Check if room already exists in either direction
+        const [{ data: roomAB }, { data: roomBA }] = await Promise.all([
+          supabase.from("chat_rooms").select("id").eq("team_a_id", user.id).eq("team_b_id", other.user_id).maybeSingle(),
+          supabase.from("chat_rooms").select("id").eq("team_a_id", other.user_id).eq("team_b_id", user.id).maybeSingle(),
+        ]);
+        if (roomAB || roomBA) continue;
+
+        // Check slot overlap
+        const { data: theirSlots } = await supabase
+          .from("availability_slots")
+          .select("slot_key")
+          .eq("user_id", other.user_id)
+          .eq("state", "free");
+
+        if (!theirSlots || theirSlots.length === 0) continue;
+
+        const hasOverlap = theirSlots.some((s: { slot_key: string }) => mySlotSet.has(s.slot_key));
+        if (!hasOverlap) continue;
+
+        const { error: roomErr } = await supabase.from("chat_rooms").insert({
+          team_a_id: user.id,
+          team_b_id: other.user_id,
+          team_a_name: user.name || "チームA",
+          team_b_name: other.university_name || "チームB",
+          status: "active",
+        });
+
+        if (roomErr) {
+          console.error("[publish] room create error:", roomErr);
+        } else {
+          newMatches++;
+          console.log("[publish] matched with:", other.university_name);
+        }
+      }
+
+      if (newMatches > 0) {
+        setNewMatchCount(newMatches);
+        showToast("ok", `🎉 ${newMatches}件のマッチングが成立しました！`);
+      } else {
+        showToast("ok", "公開しました（マッチング相手を探しています）");
+      }
+    } catch (err) {
+      console.error("[publish] error:", err);
+      showToast("err", "公開処理中にエラーが発生しました");
+    } finally {
+      setPublishing(false);
     }
   };
 
@@ -200,8 +312,20 @@ export default function AvailabilityPage() {
                 <span style={{ fontSize: 13, fontWeight: 800 }}>6月23日 — 29日</span>
                 <span style={{ fontSize: 15, color: C.muted, cursor: "pointer", userSelect: "none" }}>›</span>
               </div>
-              <button className="avail-publish-btn gradient-btn" style={{ background: C.accent, color: "#fff", fontSize: 13, fontWeight: 800, padding: "10px 20px", borderRadius: 10, border: "none", cursor: "pointer" }}>
-                公開する
+              <button
+                className="avail-publish-btn gradient-btn"
+                onClick={handlePublish}
+                disabled={publishing}
+                style={{
+                  background: isPublished ? C.green : C.accent,
+                  color: "#fff", fontSize: 13, fontWeight: 800,
+                  padding: "10px 20px", borderRadius: 10, border: "none",
+                  cursor: publishing ? "wait" : "pointer",
+                  opacity: publishing ? 0.7 : 1,
+                  transition: "background 0.2s",
+                }}
+              >
+                {publishing ? "公開中…" : isPublished ? "✓ 公開済み" : "公開する"}
               </button>
             </div>
           </div>
@@ -210,6 +334,18 @@ export default function AvailabilityPage() {
           {loadError && (
             <div style={{ padding: "10px 24px", background: "rgba(255,92,108,0.1)", borderBottom: `1px solid rgba(255,92,108,0.2)`, fontSize: 12, color: C.red, flexShrink: 0 }}>
               ⚠ {loadError} — セルをタップして手動で設定できます
+            </div>
+          )}
+
+          {/* New match banner */}
+          {newMatchCount > 0 && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 24px", background: "rgba(37,208,125,0.12)", borderBottom: "1px solid rgba(37,208,125,0.25)", flexShrink: 0 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: C.green }}>
+                🎉 {newMatchCount}件のマッチングが成立しました！
+              </span>
+              <Link href="/matches" style={{ fontSize: 12, color: C.green, fontWeight: 700, textDecoration: "none" }}>
+                マッチング一覧を見る →
+              </Link>
             </div>
           )}
 
@@ -225,7 +361,9 @@ export default function AvailabilityPage() {
                 <span style={{ fontSize: 12, color: C.muted }}>{l.label}</span>
               </div>
             ))}
-            <span className="avail-hint" style={{ marginLeft: "auto", fontSize: 11, color: "#5A647F" }}>タップで 未設定 → 空き → 予定あり → 未設定</span>
+            <span className="avail-hint" style={{ marginLeft: "auto", fontSize: 11, color: "#5A647F" }}>
+              タップで 未設定 → 空き → 予定あり → 未設定
+            </span>
           </div>
 
           {/* Calendar grid */}
@@ -277,15 +415,10 @@ export default function AvailabilityPage() {
                           style={{
                             height: 44,
                             borderRadius: 7,
-                            border: isFlashing
-                              ? `2px solid #fff`
-                              : `1px solid ${C.cellBorder}`,
+                            border: isFlashing ? `2px solid #fff` : `1px solid ${C.cellBorder}`,
                             cursor: isSaving ? "wait" : "pointer",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            fontSize: 11,
-                            fontWeight: 700,
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: 11, fontWeight: 700,
                             transition: "border-color 0.15s, transform 0.1s, opacity 0.1s",
                             transform: isFlashing ? "scale(0.94)" : "scale(1)",
                             opacity: isSaving ? 0.5 : 1,
@@ -306,27 +439,15 @@ export default function AvailabilityPage() {
         </main>
       </div>
 
-      {/* Toast notification */}
+      {/* Toast */}
       {toast && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: 88,
-            left: "50%",
-            transform: "translateX(-50%)",
-            background: toast.type === "ok" ? "rgba(37,208,125,0.95)" : "rgba(255,92,108,0.95)",
-            color: "#fff",
-            padding: "10px 22px",
-            borderRadius: 12,
-            fontSize: 13,
-            fontWeight: 700,
-            zIndex: 200,
-            boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
-            pointerEvents: "none",
-            whiteSpace: "nowrap",
-            letterSpacing: 0.3,
-          }}
-        >
+        <div style={{
+          position: "fixed", bottom: 88, left: "50%", transform: "translateX(-50%)",
+          background: toast.type === "ok" ? "rgba(37,208,125,0.95)" : "rgba(255,92,108,0.95)",
+          color: "#fff", padding: "10px 22px", borderRadius: 12, fontSize: 13, fontWeight: 700,
+          zIndex: 200, boxShadow: "0 4px 20px rgba(0,0,0,0.5)", pointerEvents: "none",
+          whiteSpace: "nowrap", letterSpacing: 0.3,
+        }}>
           {toast.type === "ok" ? "✓ " : "✕ "}{toast.text}
         </div>
       )}
