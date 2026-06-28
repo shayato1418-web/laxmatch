@@ -96,6 +96,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Ensure a profiles row exists the moment the user is available
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase
+      .from('profiles')
+      .select('user_id')
+      .eq('user_id', user.id)
+      .single()
+      .then(({ error }) => {
+        if (error?.code === 'PGRST116') {
+          // Row not found — create it from user_metadata
+          supabase.from('profiles').insert({
+            user_id: user.id,
+            university_name: user.name || '',
+            gender: user.gender || '',
+            region: user.area || '',
+            level: user.level || '',
+            line_id: user.lineId || '',
+            notes: user.notes || '',
+            is_public: false,
+          }).then(({ error: e }) => { if (e) console.error('[profile] ensure:', e); });
+        }
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
   const login = async (email: string, password: string) => {
     setIsLoading(true);
     try {
@@ -155,6 +181,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Also persist to localStorage for admin page compatibility
       if (data.user) {
+        // Create Supabase profile (fire-and-forget; may fail silently if email confirmation pending)
+        supabase.from('profiles').upsert(
+          {
+            user_id: data.user.id,
+            university_name: userData.name || '',
+            gender: userData.gender || '',
+            region: userData.area || '',
+            level: userData.level || '',
+            line_id: userData.lineId || '',
+            notes: userData.notes || '',
+            is_public: false,
+          },
+          { onConflict: 'user_id', ignoreDuplicates: true }
+        ).then(({ error }) => { if (error) console.error('[profile] create:', error); });
+
         const stored = JSON.parse(localStorage.getItem('users') ?? '[]');
         if (!stored.some((u: { id: string }) => u.id === data.user!.id)) {
           stored.push({
@@ -232,6 +273,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw new Error(error.message);
     const updated = { ...user, ...updates };
     setUser(updated);
+
+    // Sync to Supabase profiles table
+    const profilePatch: Record<string, string> = {};
+    if (updates.name    !== undefined) profilePatch.university_name = updates.name;
+    if (updates.area    !== undefined) profilePatch.region           = updates.area;
+    if (updates.level   !== undefined) profilePatch.level            = updates.level;
+    if (updates.lineId  !== undefined) profilePatch.line_id          = updates.lineId;
+    if (updates.notes   !== undefined) profilePatch.notes            = updates.notes;
+    if (Object.keys(profilePatch).length > 0) {
+      supabase.from('profiles').update(profilePatch).eq('user_id', user.id)
+        .then(({ error }) => { if (error) console.error('[profile] sync:', error); });
+    }
 
     // Keep localStorage in sync for admin page
     const users = JSON.parse(localStorage.getItem('users') ?? '[]');
