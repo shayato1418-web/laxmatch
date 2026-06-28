@@ -162,7 +162,6 @@ export default function ChatPage() {
     const t = draft.trim();
     if (!t || !active?.confirmed || !user?.id || sending) return;
     setSending(true);
-    setDraft("");
     try {
       const { data, error } = await supabase
         .from("messages")
@@ -170,6 +169,7 @@ export default function ChatPage() {
         .select("id, created_at")
         .single();
       if (!error && data) {
+        setDraft("");
         const msg: Msg = { id: data.id, from: "me", text: t, time: fmtTime(data.created_at) };
         setConvs((prev) =>
           prev.map((c, i) =>
