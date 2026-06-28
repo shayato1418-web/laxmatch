@@ -67,7 +67,9 @@ export default function Sidebar({ active }: { active: string }) {
 
   const unreadCount = notifs.filter((n) => !n.read).length;
 
-  const displayName = user?.role === "manager" ? "管理人" : user?.name || "ゲスト";
+  const displayName =
+    user?.role === "manager" ? "管理者" :
+    user?.name || "ゲスト";
   const initials =
     displayName.replace(/[ぁ-ん]+|[ァ-ン]+|[A-Za-z]/g, "").slice(0, 2) ||
     displayName.slice(0, 2).toUpperCase();

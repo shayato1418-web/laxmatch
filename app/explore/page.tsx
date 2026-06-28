@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import { useAuth } from "@/app/context/AuthContext";
@@ -20,6 +21,7 @@ const C = {
   deep: "#0C1222",
   labelColor: "#5A647F",
   green: "#25D07D",
+  red: "#FF5C6C",
 } as const;
 
 const HUES = [
@@ -57,9 +59,12 @@ type Profile = {
 
 type RoomStatus = "applied" | "matched" | null;
 
+type Toast = { type: "ok" | "err"; text: string };
+
 export default function ExplorePage() {
   const { user } = useAuth();
   const supabase = useMemo(() => createClient(), []);
+  const router = useRouter();
 
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [roomStatuses, setRoomStatuses] = useState<Map<string, RoomStatus>>(new Map());
@@ -68,6 +73,8 @@ export default function ExplorePage() {
   const [search, setSearch] = useState("");
   const [filterRegion, setFilterRegion] = useState("");
   const [filterLevel, setFilterLevel] = useState("");
+  const [toast, setToast] = useState<Toast | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
     if (!user?.id) return;
@@ -111,6 +118,15 @@ export default function ExplorePage() {
 
   useEffect(() => { void load(); }, [load]);
 
+  const showToast = (type: "ok" | "err", text: string, navigateTo?: string) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast({ type, text });
+    toastTimer.current = setTimeout(() => {
+      setToast(null);
+      if (navigateTo) router.push(navigateTo);
+    }, 2000);
+  };
+
   const handleApply = async (target: Profile) => {
     if (!user?.id || applying.has(target.user_id)) return;
     setApplying((s) => new Set([...s, target.user_id]));
@@ -120,10 +136,13 @@ export default function ExplorePage() {
         team_b_id: target.user_id,
         team_a_name: user.name || "チームA",
         team_b_name: target.university_name || "チームB",
-        status: "locked",
+        status: "active",
       });
       if (!error) {
-        setRoomStatuses((m) => new Map(m).set(target.user_id, "applied"));
+        setRoomStatuses((m) => new Map(m).set(target.user_id, "matched"));
+        showToast("ok", "マッチング成立！チャットを開始できます", "/chat");
+      } else {
+        showToast("err", `申請に失敗しました: ${error.message}`);
       }
     } finally {
       setApplying((s) => { const ns = new Set(s); ns.delete(target.user_id); return ns; });
@@ -277,6 +296,17 @@ export default function ExplorePage() {
           </div>
         </main>
       </div>
+      {toast && (
+        <div style={{
+          position: "fixed", bottom: 88, left: "50%", transform: "translateX(-50%)",
+          background: toast.type === "ok" ? "rgba(37,208,125,0.97)" : "rgba(255,92,108,0.97)",
+          color: "#fff", padding: "12px 28px", borderRadius: 14, fontSize: 14, fontWeight: 800,
+          zIndex: 200, boxShadow: "0 4px 24px rgba(0,0,0,0.5)", pointerEvents: "none",
+          whiteSpace: "nowrap", letterSpacing: 0.3,
+        }}>
+          {toast.type === "ok" ? "🎉 " : "✕ "}{toast.text}
+        </div>
+      )}
       <MobileBottomNav />
     </div>
   );
