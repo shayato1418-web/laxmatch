@@ -37,7 +37,7 @@ interface AuthContextType {
   isLoading: boolean;
   impersonation: ImpersonationBackup | null;
   login: (email: string, password: string) => Promise<void>;
-  impersonate: (email: string, password: string) => Promise<void>;
+  impersonate: (email: string, password?: string) => Promise<void>;
   returnToAdmin: () => Promise<void>;
   register: (userData: Omit<User, 'id' | 'createdAt'> & { password: string }) => Promise<{ needsConfirmation: boolean }>;
   logout: () => Promise<void>;
@@ -228,7 +228,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   };
 
-  const impersonate = async (email: string, password: string) => {
+  const impersonate = async (email: string, password?: string) => {
     if (!user) throw new Error('ログインしていません');
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     if (sessionError || !session) {
@@ -245,11 +245,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
     localStorage.setItem('adminImpersonationBackup', JSON.stringify(backup));
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      localStorage.removeItem('adminImpersonationBackup');
-      throw new Error(error.message);
+    // Try admin API route first (requires SUPABASE_SERVICE_ROLE_KEY on server)
+    let signedIn = false;
+    try {
+      const res = await fetch('/api/admin/impersonate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ email }),
+      });
+      if (res.ok) {
+        const { token } = await res.json() as { token: string };
+        const { error: otpErr } = await supabase.auth.verifyOtp({
+          token_hash: token,
+          type: 'magiclink',
+        });
+        if (!otpErr) signedIn = true;
+      }
+    } catch {
+      // API route unavailable — fall through to password
     }
+
+    // Fallback: sign in with stored password
+    if (!signedIn && password) {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        localStorage.removeItem('adminImpersonationBackup');
+        throw new Error(`代理ログインに失敗しました: ${error.message}`);
+      }
+      signedIn = true;
+    }
+
+    if (!signedIn) {
+      localStorage.removeItem('adminImpersonationBackup');
+      throw new Error('代理ログインに失敗しました（パスワード未登録かつサービスロールキー未設定）');
+    }
+
     setImpersonation(backup);
   };
 
@@ -257,12 +290,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const stored = localStorage.getItem('adminImpersonationBackup');
     if (!stored) return;
     const backup = JSON.parse(stored) as ImpersonationBackup;
-    const { error } = await supabase.auth.setSession(backup.session as any);
-    if (error) {
-      throw new Error(error.message);
-    }
+
+    // Always clean up backup first so we're not stuck in impersonation state
     localStorage.removeItem('adminImpersonationBackup');
     setImpersonation(null);
+
+    const { error } = await supabase.auth.setSession({
+      access_token: backup.session.access_token,
+      refresh_token: backup.session.refresh_token,
+    });
+    if (error) {
+      // Session expired — sign out and let user re-authenticate
+      await supabase.auth.signOut();
+      setUser(null);
+      throw new Error('管理者セッションの有効期限が切れています。再度ログインしてください。');
+    }
   };
 
   const updateProfile = async (

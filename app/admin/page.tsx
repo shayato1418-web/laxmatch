@@ -292,16 +292,15 @@ function UserManagement({ users, setUsers }: { users: AdminUser[]; setUsers: Dis
   };
 
   const handleImpersonate = async (id: string) => {
-    const user = users.find((u) => u.id === id);
-    if (!user) return;
-    if (user.role === "manager") {
+    const target = users.find((u) => u.id === id);
+    if (!target) return;
+    if (target.role === "manager") {
       window.alert("管理人アカウントの代理ログインはできません");
       return;
     }
     try {
-      await impersonate(user.email, user.password);
-      window.alert(`代理ログイン中: ${user.name}`);
-      window.location.reload();
+      await impersonate(target.email, target.password);
+      // Navigation handled automatically: onAuthStateChange fires → isAdmin becomes false → useEffect redirects to /
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "代理ログインに失敗しました");
     }
@@ -804,7 +803,7 @@ type SectionId = (typeof NAV)[number]["id"];
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function AdminPage() {
-  const { user, isLoading, logout, impersonation, returnToAdmin } = useAuth();
+  const { user, isLoading, logout } = useAuth();
   const router = useRouter();
   const [section, setSection] = useState<SectionId>("dashboard");
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -907,27 +906,6 @@ export default function AdminPage() {
 
         {/* Main content */}
         <main style={{ flex: 1, overflowY: "auto", padding: "28px 32px" }}>
-          {impersonation && (
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, background: "#4D1E00", color: "#FFF6E1", border: "1px solid #D88A1E", borderRadius: 14, padding: "14px 18px", marginBottom: 18 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, fontWeight: 700 }}>
-                <span>⚠️ 代理ログイン中：</span>
-                <span>{user.name}</span>
-              </div>
-              <button
-                onClick={async () => {
-                  try {
-                    await returnToAdmin();
-                    window.location.reload();
-                  } catch (err) {
-                    window.alert(err instanceof Error ? err.message : "管理人セッションへの復元に失敗しました");
-                  }
-                }}
-                style={{ background: C.red, color: "#fff", border: "none", borderRadius: 10, padding: "10px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
-              >
-                管理人に戻る
-              </button>
-            </div>
-          )}
           {section === "dashboard"     && <Dashboard users={users} matches={matches} />}
           {section === "users"         && <UserManagement users={users} setUsers={setUsers} />}
           {section === "matches"       && <MatchManagement matches={matches} setMatches={setMatches} />}
