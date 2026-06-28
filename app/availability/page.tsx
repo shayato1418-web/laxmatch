@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import { useAuth } from "@/app/context/AuthContext";
@@ -16,9 +16,12 @@ const C = {
   border: "#1A2138",
   border2: "#232C45",
   cellBorder: "#1B2238",
+  green: "#25D07D",
+  red: "#FF5C6C",
 } as const;
 
 type SlotState = "none" | "free" | "busy";
+type Toast = { id: number; type: "ok" | "err"; text: string };
 
 // 6:00 〜 21:30 を 30 分刻みで生成
 const TIME_SLOTS: string[] = [];
@@ -55,21 +58,48 @@ export default function AvailabilityPage() {
   const supabase = useMemo(() => createClient(), []);
   const [grid, setGrid] = useState<SlotState[][]>(mkGrid);
   const [flash, setFlash] = useState<`${number}-${number}` | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [savingCells, setSavingCells] = useState<Set<string>>(new Set());
+  const [toast, setToast] = useState<Toast | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const showToast = useCallback((type: "ok" | "err", text: string) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast({ id: Date.now(), type, text });
+    toastTimer.current = setTimeout(() => setToast(null), type === "ok" ? 1500 : 3000);
+  }, []);
+
+  // Load from Supabase on mount
   useEffect(() => {
     if (!user?.id) return;
+    console.log("[availability] loading for user:", user.id);
     supabase
       .from("availability_slots")
       .select("slot_key, state")
       .eq("user_id", user.id)
       .then(({ data, error }) => {
-        if (error || !data) return;
+        if (error) {
+          console.error("[availability] load error:", error.code, error.message);
+          setLoadError(`読み込みエラー: ${error.message}`);
+          return;
+        }
+        if (!data || data.length === 0) {
+          console.log("[availability] no saved data");
+          return;
+        }
+        console.log("[availability] loaded", data.length, "slots");
         setGrid((g) => {
           const next = g.map((r) => [...r]);
           (data as { slot_key: string; state: SlotState }[]).forEach(({ slot_key, state }) => {
-            const [si, di] = slot_key.split("-").map(Number);
-            if (si >= 0 && si < TIME_SLOTS.length && di >= 0 && di < DAYS.length) {
+            const parts = slot_key.split("-");
+            const si = Number(parts[0]);
+            const di = Number(parts[1]);
+            if (
+              !isNaN(si) && !isNaN(di) &&
+              si >= 0 && si < TIME_SLOTS.length &&
+              di >= 0 && di < DAYS.length
+            ) {
               next[si][di] = state;
             }
           });
@@ -79,33 +109,68 @@ export default function AvailabilityPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  const toggle = (si: number, di: number) => {
-    const newState: SlotState = grid[si][di] === "none" ? "free" : grid[si][di] === "free" ? "busy" : "none";
+  const toggle = async (si: number, di: number) => {
+    const key = `${si}-${di}`;
+
+    console.log("[availability] toggle", { si, di, current: grid[si][di], userId: user?.id });
+
+    const prevState = grid[si][di];
+    const newState: SlotState = prevState === "none" ? "free" : prevState === "free" ? "busy" : "none";
+
+    // Optimistic UI update
     setGrid((g) => {
       const next = g.map((r) => [...r]);
       next[si][di] = newState;
       return next;
     });
-    if (user?.id) {
-      supabase
-        .from("availability_slots")
-        .upsert(
-          { user_id: user.id, slot_key: `${si}-${di}`, state: newState },
-          { onConflict: "user_id,slot_key" }
-        )
-        .then(({ error }) => { if (error) console.error("availability save:", error); });
+
+    // Flash animation
+    setFlash(key as `${number}-${number}`);
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setFlash(null), 400);
+
+    if (!user?.id) {
+      console.warn("[availability] no user ID, UI updated but not saved");
+      showToast("err", "ログインが必要です");
+      return;
     }
-    const key = `${si}-${di}` as const;
-    setFlash(key);
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => setFlash(null), 400);
+
+    setSavingCells((s) => new Set([...s, key]));
+
+    console.log("[availability] upsert", { user_id: user.id, slot_key: key, state: newState });
+
+    const { error } = await supabase
+      .from("availability_slots")
+      .upsert(
+        { user_id: user.id, slot_key: key, state: newState },
+        { onConflict: "user_id,slot_key" }
+      );
+
+    setSavingCells((s) => {
+      const ns = new Set(s);
+      ns.delete(key);
+      return ns;
+    });
+
+    if (error) {
+      console.error("[availability] save error:", error.code, error.message, error.details, error.hint);
+      showToast("err", `保存に失敗しました (${error.code ?? error.message})`);
+      // Revert to previous state
+      setGrid((g) => {
+        const next = g.map((r) => [...r]);
+        next[si][di] = prevState;
+        return next;
+      });
+    } else {
+      console.log("[availability] saved:", key, "→", newState);
+      showToast("ok", "保存しました");
+    }
   };
 
   return (
     <div style={{ height: "100vh", display: "flex", background: C.bg, overflow: "hidden" }}>
       {/* Chrome bar */}
       <div className="chrome-bar" style={{ position: "fixed", top: 0, left: 0, right: 0, height: 42, background: C.header, borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", padding: "0 16px", gap: 10, zIndex: 50 }}>
-
         <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
           <div style={{ minWidth: 360, background: "#161E33", border: `1px solid ${C.border2}`, borderRadius: 8, padding: "6px 16px", fontFamily: "'Roboto Mono', monospace", fontSize: 11, color: C.muted, textAlign: "center" }}>
             laxmatch.jp/availability
@@ -125,6 +190,11 @@ export default function AvailabilityPage() {
               <div style={{ fontSize: 20, fontWeight: 900, marginTop: 3 }}>空き日程を登録</div>
             </div>
             <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              {savingCells.size > 0 && (
+                <div style={{ fontFamily: "'Roboto Mono', monospace", fontSize: 10, color: C.muted, letterSpacing: 1 }}>
+                  保存中…
+                </div>
+              )}
               <div style={{ display: "flex", alignItems: "center", gap: 14, background: "#121829", border: `1px solid ${C.border2}`, borderRadius: 10, padding: "8px 16px" }}>
                 <span style={{ fontSize: 15, color: C.muted, cursor: "pointer", userSelect: "none" }}>‹</span>
                 <span style={{ fontSize: 13, fontWeight: 800 }}>6月23日 — 29日</span>
@@ -135,6 +205,13 @@ export default function AvailabilityPage() {
               </button>
             </div>
           </div>
+
+          {/* Load error banner */}
+          {loadError && (
+            <div style={{ padding: "10px 24px", background: "rgba(255,92,108,0.1)", borderBottom: `1px solid rgba(255,92,108,0.2)`, fontSize: 12, color: C.red, flexShrink: 0 }}>
+              ⚠ {loadError} — セルをタップして手動で設定できます
+            </div>
+          )}
 
           {/* Legend */}
           <div style={{ display: "flex", gap: 20, padding: "10px 24px", borderBottom: `1px solid #141B2E`, flexShrink: 0, alignItems: "center" }}>
@@ -174,7 +251,6 @@ export default function AvailabilityPage() {
                 const isHour = label.endsWith(":00");
                 return (
                   <div key={label} style={{ display: "grid", gridTemplateColumns: "52px repeat(7,1fr)", gap: 4, marginBottom: 3 }}>
-                    {/* Time label — only show :00, skip :30 to reduce clutter */}
                     <div style={{
                       display: "flex", alignItems: "center",
                       fontFamily: "'Roboto Mono', monospace",
@@ -189,26 +265,32 @@ export default function AvailabilityPage() {
 
                     {DAYS.map((_, di) => {
                       const st = grid[si][di];
-                      const key = `${si}-${di}` as const;
-                      const isFlashing = flash === key;
+                      const cellKey = `${si}-${di}` as const;
+                      const isFlashing = flash === cellKey;
+                      const isSaving = savingCells.has(`${si}-${di}`);
                       return (
                         <button
                           key={di}
-                          onClick={() => toggle(si, di)}
+                          type="button"
+                          onClick={() => { void toggle(si, di); }}
+                          disabled={isSaving}
                           style={{
                             height: 44,
                             borderRadius: 7,
                             border: isFlashing
                               ? `2px solid #fff`
                               : `1px solid ${C.cellBorder}`,
-                            cursor: "pointer",
+                            cursor: isSaving ? "wait" : "pointer",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
                             fontSize: 11,
                             fontWeight: 700,
-                            transition: "border-color 0.15s, transform 0.1s",
+                            transition: "border-color 0.15s, transform 0.1s, opacity 0.1s",
                             transform: isFlashing ? "scale(0.94)" : "scale(1)",
+                            opacity: isSaving ? 0.5 : 1,
+                            WebkitTapHighlightColor: "transparent",
+                            touchAction: "manipulation",
                             ...cellBg(st),
                           }}
                         >
@@ -223,6 +305,32 @@ export default function AvailabilityPage() {
           </div>
         </main>
       </div>
+
+      {/* Toast notification */}
+      {toast && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 88,
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: toast.type === "ok" ? "rgba(37,208,125,0.95)" : "rgba(255,92,108,0.95)",
+            color: "#fff",
+            padding: "10px 22px",
+            borderRadius: 12,
+            fontSize: 13,
+            fontWeight: 700,
+            zIndex: 200,
+            boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
+            pointerEvents: "none",
+            whiteSpace: "nowrap",
+            letterSpacing: 0.3,
+          }}
+        >
+          {toast.type === "ok" ? "✓ " : "✕ "}{toast.text}
+        </div>
+      )}
+
       <MobileBottomNav />
     </div>
   );
