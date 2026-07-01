@@ -205,7 +205,7 @@ export default function Sidebar({ active }: { active: string }) {
                 {displayName}
               </div>
               <div style={{ fontSize: 10.5, color: S.muted }}>
-                {user?.role === "manager" ? "管理者" : user?.role === "individual" ? "個人/クラブ" : "大学チーム"}
+                {user?.role === "manager" ? "管理者" : user?.name || "—"}
               </div>
             </div>
             <button
