@@ -576,24 +576,51 @@ function NotificationSender({ users, notifs, setNotifs }: {
   notifs: Notification[];
   setNotifs: Dispatch<SetStateAction<Notification[]>>;
 }) {
+  const supabase = useMemo(() => createClient(), []);
   const [target, setTarget] = useState<string>("all");
   const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sendResult, setSendResult] = useState<{ ok: boolean; text: string } | null>(null);
 
-  const send = () => {
+  const send = async () => {
     const t = message.trim();
-    if (!t) return;
+    if (!t || sending) return;
+    setSending(true);
+    setSendResult(null);
+
     const targetUser = users.find((u) => u.id === target);
+    let error: { message: string } | null = null;
+
+    if (target === "all") {
+      const rows = users.filter((u) => u.role !== "manager").map((u) => ({ user_id: u.id, message: t }));
+      if (rows.length > 0) {
+        const res = await supabase.from("notifications").insert(rows);
+        error = res.error;
+      }
+    } else {
+      const res = await supabase.from("notifications").insert({ user_id: target, message: t });
+      error = res.error;
+    }
+
+    setSending(false);
+    if (error) {
+      setSendResult({ ok: false, text: `送信失敗: ${error.message}` });
+      return;
+    }
+
     setNotifs((prev) => [
       {
         id: `n${Date.now()}`,
         target,
-        targetName: target === "all" ? "全ユーザー" : (targetUser?.name || "不明"),
+        targetName: target === "all" ? `全ユーザー (${users.filter((u) => u.role !== "manager").length}名)` : (targetUser?.name || "不明"),
         message: t,
         sentAt: nowStr(),
       },
       ...prev,
     ]);
     setMessage("");
+    setSendResult({ ok: true, text: target === "all" ? `${users.filter((u) => u.role !== "manager").length}名に送信しました` : "送信しました" });
+    setTimeout(() => setSendResult(null), 4000);
   };
 
   return (
@@ -626,18 +653,24 @@ function NotificationSender({ users, notifs, setNotifs }: {
               style={{ width: "100%", background: "#0D1322", border: `1px solid ${C.b2}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, color: C.text, outline: "none", resize: "vertical", boxSizing: "border-box" }}
             />
           </label>
+          {sendResult && (
+            <div style={{ marginBottom: 12, padding: "10px 14px", borderRadius: 10, fontSize: 13, fontWeight: 700, background: sendResult.ok ? "rgba(37,208,125,0.12)" : "rgba(255,92,108,0.12)", color: sendResult.ok ? C.green : C.red, border: `1px solid ${sendResult.ok ? "rgba(37,208,125,0.3)" : "rgba(255,92,108,0.3)"}` }}>
+              {sendResult.ok ? "✓ " : "✕ "}{sendResult.text}
+            </div>
+          )}
           <button
-            onClick={send}
-            disabled={!message.trim()}
+            onClick={() => { void send(); }}
+            disabled={!message.trim() || sending}
             style={{
               width: "100%",
-              background: message.trim() ? C.accent : "#1A2138",
-              color: message.trim() ? "#fff" : C.muted,
+              background: message.trim() && !sending ? C.accent : "#1A2138",
+              color: message.trim() && !sending ? "#fff" : C.muted,
               border: "none", borderRadius: 10, padding: 12,
-              fontSize: 13, fontWeight: 800, cursor: message.trim() ? "pointer" : "default",
+              fontSize: 13, fontWeight: 800, cursor: message.trim() && !sending ? "pointer" : "default",
+              opacity: sending ? 0.7 : 1,
             }}
           >
-            送信する
+            {sending ? "送信中…" : "送信する"}
           </button>
         </div>
 

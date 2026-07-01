@@ -1,8 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import { useAuth } from "@/app/context/AuthContext";
@@ -59,20 +57,24 @@ type Profile = {
 };
 
 type RoomStatus = "applied" | "matched" | null;
+type Toast = { type: "ok" | "err"; text: string };
 
 export default function ExplorePage() {
   const { user } = useAuth();
   const supabase = useMemo(() => createClient(), []);
-  const router = useRouter();
 
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [roomStatuses, setRoomStatuses] = useState<Map<string, RoomStatus>>(new Map());
   const [overlapMap, setOverlapMap] = useState<Map<string, boolean>>(new Map());
+  const [applying, setApplying] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterRegion, setFilterRegion] = useState("");
   const [filterLevel, setFilterLevel] = useState("");
   const [filterGender, setFilterGender] = useState("");
+  const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
+  const [toast, setToast] = useState<Toast | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
     if (!user?.id) return;
@@ -86,7 +88,6 @@ export default function ExplorePage() {
 
       if (profs) {
         setProfiles(profs as Profile[]);
-
         const ids = profs.map((p: Profile) => p.user_id);
 
         const queries: Promise<unknown>[] = [
@@ -105,7 +106,6 @@ export default function ExplorePage() {
           { data: { user_id: string; slot_key: string }[] | null } | undefined,
         ];
 
-        // Room statuses
         const statusMap = new Map<string, RoomStatus>();
         (roomsABRes.data ?? []).forEach((r) => {
           if (ids.includes(r.team_b_id)) statusMap.set(r.team_b_id, r.status === "active" ? "matched" : "applied");
@@ -115,7 +115,6 @@ export default function ExplorePage() {
         });
         setRoomStatuses(statusMap);
 
-        // Schedule overlap
         const myFreeKeys = new Set((mySlotsRes.data ?? []).map((s) => s.slot_key));
         const overlapResult = new Map<string, boolean>();
         (otherSlotsRes?.data ?? []).forEach((s) => {
@@ -130,7 +129,36 @@ export default function ExplorePage() {
 
   useEffect(() => { void load(); }, [load]);
 
-  // Derived filter data
+  const showToast = (type: "ok" | "err", text: string) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast({ type, text });
+    toastTimer.current = setTimeout(() => setToast(null), 2500);
+  };
+
+  const handleApply = async (target: Profile) => {
+    if (!user?.id || applying.has(target.user_id)) return;
+    setApplying((s) => new Set([...s, target.user_id]));
+    try {
+      const { error } = await supabase.from("chat_rooms").insert({
+        team_a_id: user.id,
+        team_b_id: target.user_id,
+        team_a_name: user.name || "チームA",
+        team_b_name: target.university_name || "チームB",
+        status: "pending",
+        requested_by: user.id,
+      });
+      if (!error) {
+        setRoomStatuses((m) => new Map(m).set(target.user_id, "applied"));
+        setSelectedProfile(null);
+        showToast("ok", "申請を送りました。相手の承認をお待ちください");
+      } else {
+        showToast("err", `申請に失敗しました: ${error.message}`);
+      }
+    } finally {
+      setApplying((s) => { const ns = new Set(s); ns.delete(target.user_id); return ns; });
+    }
+  };
+
   const regions = useMemo(() => [...new Set(profiles.map((p) => p.region).filter(Boolean))], [profiles]);
   const levels = useMemo(() => [...new Set(profiles.map((p) => p.level).filter(Boolean))], [profiles]);
   const genders = useMemo(() => [...new Set(profiles.map((p) => p.gender).filter(Boolean))], [profiles]);
@@ -144,6 +172,9 @@ export default function ExplorePage() {
       return true;
     });
   }, [profiles, search, filterRegion, filterLevel, filterGender]);
+
+  const modalStatus = selectedProfile ? roomStatuses.get(selectedProfile.user_id) : null;
+  const modalApplying = selectedProfile ? applying.has(selectedProfile.user_id) : false;
 
   return (
     <div style={{ height: "100vh", display: "flex", background: C.bg, overflow: "hidden" }}>
@@ -226,11 +257,11 @@ export default function ExplorePage() {
                   const status = roomStatuses.get(p.user_id);
                   const hasOverlap = overlapMap.get(p.user_id) ?? false;
                   return (
-                    <Link
+                    <div
                       key={p.user_id}
-                      href={`/profile/${p.user_id}`}
                       className="app-card"
-                      style={{ background: C.card, border: `1px solid ${C.cardBorder}`, borderRadius: 16, padding: 18, textDecoration: "none", color: "inherit", display: "block", cursor: "pointer" }}
+                      onClick={() => setSelectedProfile(p)}
+                      style={{ background: C.card, border: `1px solid ${C.cardBorder}`, borderRadius: 16, padding: 18, cursor: "pointer" }}
                     >
                       <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                         <div style={{ width: 48, height: 48, borderRadius: 13, background: teamHue(p.user_id), display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Archivo', sans-serif", fontWeight: 900, fontSize: 14, color: "#fff", flexShrink: 0, letterSpacing: -0.5 }}>
@@ -266,14 +297,12 @@ export default function ExplorePage() {
                       )}
 
                       <div style={{ marginTop: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <span style={{ fontSize: 12, color: status === "matched" ? C.green : status === "applied" ? C.muted : C.muted }}>
+                        <span style={{ fontSize: 12, color: status === "matched" ? C.green : C.muted }}>
                           {status === "matched" ? "✓ マッチ成立" : status === "applied" ? "申請済み" : ""}
                         </span>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: C.accent }}>
-                          詳細を見る ›
-                        </span>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: C.accent }}>詳細を見る ›</span>
                       </div>
-                    </Link>
+                    </div>
                   );
                 })}
               </div>
@@ -281,6 +310,96 @@ export default function ExplorePage() {
           </div>
         </main>
       </div>
+
+      {/* Detail Modal */}
+      {selectedProfile && (
+        <div
+          onClick={() => setSelectedProfile(null)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: "#111728", border: "1px solid #1F2740", borderRadius: 20, padding: 28, width: "100%", maxWidth: 480, position: "relative" }}
+          >
+            {/* Close */}
+            <button
+              onClick={() => setSelectedProfile(null)}
+              style={{ position: "absolute", top: 16, right: 16, background: "none", border: "none", color: C.muted, fontSize: 20, cursor: "pointer", lineHeight: 1 }}
+            >
+              ✕
+            </button>
+
+            {/* Avatar + name */}
+            <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 20 }}>
+              <div style={{ width: 60, height: 60, borderRadius: 15, background: teamHue(selectedProfile.user_id), display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Archivo', sans-serif", fontWeight: 900, fontSize: 18, color: "#fff", flexShrink: 0 }}>
+                {teamInitials(selectedProfile.university_name)}
+              </div>
+              <div>
+                <div style={{ fontSize: 20, fontWeight: 900 }}>{selectedProfile.university_name}</div>
+                <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap", alignItems: "center" }}>
+                  {selectedProfile.level && (
+                    <span style={{ fontFamily: "'Roboto Mono', monospace", fontSize: 10, color: C.accent, fontWeight: 700, border: "1px solid #2C3658", borderRadius: 6, padding: "3px 8px" }}>
+                      {selectedProfile.level}
+                    </span>
+                  )}
+                  {selectedProfile.region && <span style={{ fontSize: 12, color: C.muted }}>{selectedProfile.region}</span>}
+                  {selectedProfile.gender && <span style={{ fontSize: 12, color: C.muted }}>/ {selectedProfile.gender}</span>}
+                </div>
+              </div>
+            </div>
+
+            {/* Info rows */}
+            {[
+              { label: "大学名", value: selectedProfile.university_name },
+              { label: "地域", value: selectedProfile.region || "—" },
+              { label: "レベル", value: selectedProfile.level || "—" },
+              { label: "性別", value: selectedProfile.gender || "—" },
+            ].map(({ label, value }) => (
+              <div key={label} style={{ display: "flex", padding: "10px 0", borderBottom: "1px solid #1A2138" }}>
+                <span style={{ width: 80, fontSize: 12, color: C.muted, flexShrink: 0 }}>{label}</span>
+                <span style={{ fontSize: 13, color: C.dim, fontWeight: 600 }}>{value}</span>
+              </div>
+            ))}
+
+            {selectedProfile.notes && (
+              <div style={{ marginTop: 14, background: "#0C1222", borderRadius: 10, padding: "12px 14px", fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
+                {selectedProfile.notes}
+              </div>
+            )}
+
+            {/* Apply button */}
+            <button
+              onClick={() => { void handleApply(selectedProfile); }}
+              disabled={!!modalStatus || modalApplying}
+              style={{
+                display: "block", width: "100%", marginTop: 20,
+                background: modalStatus === "matched" ? C.green : modalStatus === "applied" ? "#2A3448" : C.accent,
+                color: "#fff", textAlign: "center", padding: 14,
+                borderRadius: 12, fontWeight: 800, fontSize: 14,
+                border: modalStatus === "applied" ? `1px solid #2C3658` : "none",
+                cursor: (modalStatus || modalApplying) ? "default" : "pointer",
+                opacity: modalApplying ? 0.6 : 1,
+                boxShadow: !modalStatus ? "0 8px 24px rgba(77,91,255,.3)" : "none",
+              }}
+            >
+              {modalApplying ? "申請中…" : modalStatus === "matched" ? "✓ マッチ成立" : modalStatus === "applied" ? "申請済み" : "マッチ申請する"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <div style={{
+          position: "fixed", bottom: 88, left: "50%", transform: "translateX(-50%)",
+          background: toast.type === "ok" ? "rgba(37,208,125,0.97)" : "rgba(255,92,108,0.97)",
+          color: "#fff", padding: "12px 28px", borderRadius: 14, fontSize: 14, fontWeight: 800,
+          zIndex: 400, boxShadow: "0 4px 24px rgba(0,0,0,0.5)", pointerEvents: "none",
+          whiteSpace: "nowrap",
+        }}>
+          {toast.type === "ok" ? "🎉 " : "✕ "}{toast.text}
+        </div>
+      )}
+
       <MobileBottomNav />
     </div>
   );

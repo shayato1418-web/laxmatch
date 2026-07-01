@@ -6,6 +6,13 @@ import MobileBottomNav from "@/components/MobileBottomNav";
 import { useAuth } from "@/app/context/AuthContext";
 import { createClient } from "@/lib/supabase/client";
 
+type SysNotif = {
+  id: string;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+};
+
 const C = {
   bg: "#0A0F1F",
   header: "#0B1120",
@@ -66,6 +73,7 @@ export default function NotificationsPage() {
 
   const [pending, setPending] = useState<Room[]>([]);
   const [resolved, setResolved] = useState<Room[]>([]);
+  const [sysNotifs, setSysNotifs] = useState<SysNotif[]>([]);
   const [acting, setActing] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<Toast | null>(null);
@@ -80,15 +88,31 @@ export default function NotificationsPage() {
   const load = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
-    const { data } = await supabase
-      .from("chat_rooms")
-      .select("id, team_a_id, team_a_name, team_b_name, status, created_at")
-      .eq("team_b_id", user.id)
-      .order("created_at", { ascending: false });
 
-    if (data) {
-      setPending((data as Room[]).filter((r) => r.status === "pending"));
-      setResolved((data as Room[]).filter((r) => r.status !== "pending"));
+    const [roomsRes, notifsRes] = await Promise.all([
+      supabase
+        .from("chat_rooms")
+        .select("id, team_a_id, team_a_name, team_b_name, status, created_at")
+        .eq("team_b_id", user.id)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("notifications")
+        .select("id, message, is_read, created_at")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false }),
+    ]);
+
+    if (roomsRes.data) {
+      setPending((roomsRes.data as Room[]).filter((r) => r.status === "pending"));
+      setResolved((roomsRes.data as Room[]).filter((r) => r.status !== "pending"));
+    }
+    if (notifsRes.data) {
+      setSysNotifs(notifsRes.data as SysNotif[]);
+      // Mark unread as read
+      const unreadIds = (notifsRes.data as SysNotif[]).filter((n) => !n.is_read).map((n) => n.id);
+      if (unreadIds.length > 0) {
+        await supabase.from("notifications").update({ is_read: true }).in("id", unreadIds);
+      }
     }
     setLoading(false);
   }, [user?.id, supabase]);
@@ -304,7 +328,36 @@ export default function NotificationsPage() {
                 </div>
               )}
 
-              {pending.length === 0 && resolved.length === 0 && (
+              {/* System notifications */}
+              {sysNotifs.length > 0 && (
+                <div style={{ marginTop: resolved.length > 0 ? 32 : 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: C.accent, marginBottom: 12, letterSpacing: 0.5 }}>
+                    お知らせ
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {sysNotifs.map((n) => (
+                      <div key={n.id} style={{
+                        background: C.card,
+                        border: `1px solid ${n.is_read ? C.cardBorder : "rgba(77,91,255,0.4)"}`,
+                        borderRadius: 14, padding: "14px 20px",
+                        display: "flex", alignItems: "flex-start", gap: 14,
+                      }}>
+                        <div style={{ width: 38, height: 38, borderRadius: 10, background: "rgba(77,91,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>
+                          🔔
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 14, color: C.dim, lineHeight: 1.6, marginBottom: 4 }}>{n.message}</div>
+                          <div style={{ fontSize: 11, color: C.muted, fontFamily: "'Roboto Mono', monospace" }}>
+                            {fmtDate(n.created_at)}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {pending.length === 0 && resolved.length === 0 && sysNotifs.length === 0 && (
                 <div style={{ textAlign: "center", padding: "80px 0", color: C.muted }}>
                   <div style={{ fontSize: 40, marginBottom: 16 }}>🔔</div>
                   <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 8 }}>通知はありません</div>
