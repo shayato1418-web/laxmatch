@@ -284,8 +284,22 @@ function Dashboard({ users, chatRooms, dbStats }: { users: AdminUser[]; chatRoom
 
 // ─── Section ②: User Management ──────────────────────────────────────────────
 function UserManagement({ users, setUsers }: { users: AdminUser[]; setUsers: Dispatch<SetStateAction<AdminUser[]>> }) {
+  const { impersonate, impersonation } = useAuth();
   const supabase = useMemo(() => createClient(), []);
   const [search, setSearch] = useState("");
+  const [impersonating, setImpersonating] = useState<string | null>(null);
+
+  const handleImpersonate = async (id: string) => {
+    if (impersonating || impersonation) return;
+    setImpersonating(id);
+    try {
+      await impersonate(id);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : '代理ログインに失敗しました');
+    } finally {
+      setImpersonating(null);
+    }
+  };
 
   const setStatus = async (id: string, status: UserStatus) => {
     setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, status } : u)));
@@ -341,10 +355,19 @@ function UserManagement({ users, setUsers }: { users: AdminUser[]; setUsers: Dis
                   <Badge label={u.status === "suspended" ? "停止中" : "有効"} color={u.status === "suspended" ? C.red : C.green} />
                 </td>
                 <td style={{ padding: "11px 14px" }}>
-                  {u.status !== "suspended"
-                    ? <Btn label="停止" color={C.yellow} onClick={() => { void setStatus(u.id, "suspended"); }} small />
-                    : <Btn label="再開" color={C.green}  onClick={() => { void setStatus(u.id, "active"); }}    small />
-                  }
+                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                    {u.status !== "suspended"
+                      ? <Btn label="停止" color={C.yellow} onClick={() => { void setStatus(u.id, "suspended"); }} small />
+                      : <Btn label="再開" color={C.green}  onClick={() => { void setStatus(u.id, "active"); }}    small />
+                    }
+                    <Btn
+                      label={impersonating === u.id ? "処理中…" : "代理ログイン"}
+                      color={C.accent}
+                      onClick={() => { void handleImpersonate(u.id); }}
+                      small
+                      disabled={!!impersonating || !!impersonation}
+                    />
+                  </div>
                 </td>
               </tr>
             ))}

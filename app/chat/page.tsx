@@ -89,7 +89,7 @@ export default function ChatPage() {
 
   const active = convs.length > 0 ? convs[activeIdx] : null;
 
-  const EMOJIS = ["😊","😂","🙏","👍","❤️","🎉","🔥","💪","😅","🤝","✅","👋","😎","🏑","⚡","🎯"];
+  const EMOJIS = ["👍","🙏","✅","📅","🏟️","😊"];
 
   useEffect(() => {
     if (!showEmoji) return;
@@ -346,7 +346,7 @@ export default function ChatPage() {
                         +
                       </button>
                       {showEmoji && (
-                        <div style={{ position: "absolute", bottom: 48, left: 0, background: "#111728", border: `1px solid ${C.border2}`, borderRadius: 14, padding: 10, display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 4, zIndex: 100, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
+                        <div style={{ position: "absolute", bottom: 48, left: 0, background: "#111728", border: `1px solid ${C.border2}`, borderRadius: 14, padding: 10, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4, zIndex: 100, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
                           {EMOJIS.map((emoji) => (
                             <button
                               key={emoji}

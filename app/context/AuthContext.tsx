@@ -37,7 +37,7 @@ interface AuthContextType {
   isLoading: boolean;
   impersonation: ImpersonationBackup | null;
   login: (email: string, password: string) => Promise<void>;
-  impersonate: (email: string, password?: string) => Promise<void>;
+  impersonate: (userId: string) => Promise<void>;
   returnToAdmin: () => Promise<void>;
   register: (userData: Omit<User, 'id' | 'createdAt'> & { password: string }) => Promise<{ needsConfirmation: boolean }>;
   logout: () => Promise<void>;
@@ -229,7 +229,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   };
 
-  const impersonate = async (email: string, password?: string) => {
+  const impersonate = async (userId: string) => {
     if (!user) throw new Error('ログインしていません');
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     if (sessionError || !session) {
@@ -241,13 +241,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       session: {
         access_token: session.access_token,
         refresh_token: session.refresh_token,
-        expires_at: session.expires_at,
+        expires_at: session.expires_at ?? 0,
       },
     };
     localStorage.setItem('adminImpersonationBackup', JSON.stringify(backup));
 
-    // Try admin API route first (requires SUPABASE_SERVICE_ROLE_KEY on server)
-    let signedIn = false;
     try {
       const res = await fetch('/api/admin/impersonate', {
         method: 'POST',
@@ -255,33 +253,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ user_id: userId }),
       });
-      if (res.ok) {
-        const { token } = await res.json() as { token: string };
-        const { error: otpErr } = await supabase.auth.verifyOtp({
-          token_hash: token,
-          type: 'magiclink',
-        });
-        if (!otpErr) signedIn = true;
-      }
-    } catch {
-      // API route unavailable — fall through to password
-    }
-
-    // Fallback: sign in with stored password
-    if (!signedIn && password) {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) {
+      if (!res.ok) {
+        const body = await res.json() as { error?: string };
         localStorage.removeItem('adminImpersonationBackup');
-        throw new Error(`代理ログインに失敗しました: ${error.message}`);
+        throw new Error(body.error ?? '代理ログインに失敗しました');
       }
-      signedIn = true;
-    }
-
-    if (!signedIn) {
-      localStorage.removeItem('adminImpersonationBackup');
-      throw new Error('代理ログインに失敗しました（パスワード未登録かつサービスロールキー未設定）');
+      const { token } = await res.json() as { token: string };
+      const { error: otpErr } = await supabase.auth.verifyOtp({
+        token_hash: token,
+        type: 'magiclink',
+      });
+      if (otpErr) {
+        localStorage.removeItem('adminImpersonationBackup');
+        throw new Error(`代理ログインに失敗しました: ${otpErr.message}`);
+      }
+    } catch (err) {
+      if (!(err instanceof Error && err.message.startsWith('代理ログイン'))) {
+        localStorage.removeItem('adminImpersonationBackup');
+      }
+      throw err;
     }
 
     setImpersonation(backup);
@@ -325,7 +317,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (updates.lineId  !== undefined) profilePatch.line_id          = updates.lineId;
     if (updates.notes   !== undefined) profilePatch.notes            = updates.notes;
     if (Object.keys(profilePatch).length > 0) {
-      supabase.from('profiles').update(profilePatch).eq('user_id', user.id)
+      supabase.from('profiles').upsert({ user_id: user.id, ...profilePatch }, { onConflict: 'user_id' })
         .then(({ error }) => { if (error) console.error('[profile] sync:', error); });
     }
 

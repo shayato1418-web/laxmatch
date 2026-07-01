@@ -22,7 +22,7 @@ const C = {
   red: "#FF5C6C",
 } as const;
 
-const LEVEL_OPTIONS = ["入門", "初級", "中級", "上級", "強豪"];
+const LEVEL_OPTIONS = ["一部", "二部", "三部"];
 const AREA_OPTIONS = [
   "北海道", "東北", "関東", "東海", "北陸", "近畿", "中国", "四国", "九州・沖縄"
 ];
@@ -64,6 +64,7 @@ export default function SettingsPage() {
   const [area, setArea] = useState("");
   const [level, setLevel] = useState("");
   const [lineId, setLineId] = useState("");
+  const [notes, setNotes] = useState("");
 
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
@@ -84,6 +85,7 @@ export default function SettingsPage() {
       setArea(user.area || "");
       setLevel(user.level || "");
       setLineId(user.lineId || "");
+      setNotes(user.notes || "");
     }
   }, [user]);
 
@@ -95,8 +97,8 @@ export default function SettingsPage() {
     setSaving(true);
     setProfileMsg(null);
     try {
-      await updateProfile({ name: name.trim(), area, level, lineId: lineId.trim() });
-      setProfileMsg({ type: "ok", text: "プロフィールを保存しました。" });
+      await updateProfile({ name: name.trim(), area, level, lineId: lineId.trim(), notes: notes.trim() });
+      setProfileMsg({ type: "ok", text: "保存しました" });
     } catch {
       setProfileMsg({ type: "err", text: "保存に失敗しました。" });
     } finally {
@@ -196,6 +198,21 @@ export default function SettingsPage() {
 
             <Field label="LINE ID">
               <TextInput value={lineId} onChange={setLineId} placeholder="例：@chiba_lacrosse" />
+            </Field>
+
+            <Field label="備考">
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="活動日程や募集条件など"
+                rows={3}
+                style={{
+                  display: "block", width: "100%",
+                  background: C.input, border: `1px solid ${C.border2}`, borderRadius: 12,
+                  padding: "13px 16px", fontSize: 14, color: C.dim, outline: "none",
+                  resize: "vertical", boxSizing: "border-box",
+                }}
+              />
             </Field>
 
             {profileMsg && (

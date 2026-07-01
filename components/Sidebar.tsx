@@ -32,7 +32,7 @@ const LINKS = [
 ];
 
 export default function Sidebar({ active }: { active: string }) {
-  const { user, logout } = useAuth();
+  const { user, logout, impersonation, returnToAdmin } = useAuth();
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
   const [notifOpen, setNotifOpen] = useState(false);
@@ -105,9 +105,35 @@ export default function Sidebar({ active }: { active: string }) {
     displayName.replace(/[ぁ-ん]+|[ァ-ン]+|[A-Za-z]/g, "").slice(0, 2) ||
     displayName.slice(0, 2).toUpperCase();
 
+  const handleReturnToAdmin = async () => {
+    try {
+      await returnToAdmin();
+      router.push("/admin");
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "管理人への復帰に失敗しました");
+    }
+  };
+
   return (
     <>
-      <aside className="app-sidebar" style={{
+      {impersonation && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, zIndex: 9999,
+          background: "#FF9500", color: "#fff",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "10px 20px", fontSize: 13, fontWeight: 700,
+          boxShadow: "0 2px 12px rgba(255,149,0,0.4)",
+        }}>
+          <span>⚠️ 代理ログイン中：{user?.name || user?.email}</span>
+          <button
+            onClick={() => { void handleReturnToAdmin(); }}
+            style={{ background: "rgba(0,0,0,0.2)", color: "#fff", border: "1px solid rgba(255,255,255,0.3)", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+          >
+            管理人に戻る
+          </button>
+        </div>
+      )}
+      <aside className="app-sidebar" style={{ marginTop: impersonation ? 42 : 0,
         width: 236,
         minWidth: 236,
         background: S.bg,
