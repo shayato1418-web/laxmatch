@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useAuth } from "@/app/context/AuthContext";
 
 const C = {
   accent: "#4D5BFF",
@@ -14,8 +15,69 @@ const C = {
   green:  "#25D07D",
 } as const;
 
+const FAQ_ITEMS = [
+  {
+    q: "利用料はかかりますか？",
+    a: "現在β版のため、すべての機能を無料でご利用いただけます。将来的に有料プランを導入する可能性がありますが、その際は事前にご案内します。",
+  },
+  {
+    q: "どんなチームが登録できますか？",
+    a: "大学ラクロス部（男女問わず）、個人、クラブチーム、OB会など、ラクロスに関わるすべての方にご利用いただけます。",
+  },
+  {
+    q: "練習試合はどのような流れで成立しますか？",
+    a: "①空き日程を登録して公開 → ②相手チームからマッチ申請が届く → ③承認するとチャットが開放 → ④チャットで日時・会場・形式を調整 → 試合成立、という流れです。",
+  },
+  {
+    q: "相手チームの情報はどこで確認できますか？",
+    a: "「探す」ページから公開中のチームを一覧できます。地域・レベル・男女などでフィルターをかけて検索することも可能です。",
+  },
+  {
+    q: "マッチングが成立したら何ができますか？",
+    a: "チャット機能が開放され、会場・日時・参加人数・試合形式などをアプリ内で直接調整できます。LINE IDの交換もスムーズに行えます。",
+  },
+  {
+    q: "申請を取り消すことはできますか？",
+    a: "相手チームが承認する前であれば、マッチング一覧の「申請中」タブからキャンセルできます。",
+  },
+  {
+    q: "試合当日の責任はどちらが負いますか？",
+    a: "会場手配・安全管理・傷害対応はすべて試合を行うチーム同士の責任となります。LaxMatchは場所を提供するサービスであり、試合に関する責任は負いません。",
+  },
+  {
+    q: "退会したい場合はどうすればいいですか？",
+    a: "設定ページからアカウントを削除できます。退会前に進行中のマッチングがある場合は、相手チームへご連絡の上手続きをお願いします。",
+  },
+];
+
+function FaqItem({ q, a }: { q: string; a: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ borderBottom: `1px solid ${C.border}`, padding: "0" }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center",
+          padding: "20px 0", background: "none", border: "none", cursor: "pointer",
+          textAlign: "left", gap: 16,
+        }}
+      >
+        <span style={{ fontSize: 15, fontWeight: 800, color: C.dim, lineHeight: 1.5 }}>{q}</span>
+        <span style={{ fontFamily: "'Roboto Mono', monospace", fontSize: 16, color: C.accent, flexShrink: 0, transform: open ? "rotate(45deg)" : "none", transition: "transform 0.2s" }}>+</span>
+      </button>
+      {open && (
+        <div style={{ fontSize: 14, color: C.muted, lineHeight: 1.85, paddingBottom: 20 }}>
+          {a}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function LandingPage() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const { user } = useAuth();
+  const logoHref = user ? "/explore" : "/lp";
 
   return (
     <div className="lp">
@@ -23,9 +85,9 @@ export default function LandingPage() {
       {/* ── Navbar ── */}
       <header className="lp-header">
         <div className="lp-logo-area">
-          <span style={{ fontFamily: "'Archivo', sans-serif", fontWeight: 900, fontSize: 21, letterSpacing: 0.5 }}>
+          <Link href={logoHref} style={{ fontFamily: "'Archivo', sans-serif", fontWeight: 900, fontSize: 21, letterSpacing: 0.5, color: "#EAF0FF", textDecoration: "none" }}>
             LAX<span style={{ color: C.accent }}>·</span>MATCH
-          </span>
+          </Link>
           <nav className="lp-nav">
             <a href="#features">特徴</a>
             <a href="#how">使い方</a>
@@ -126,6 +188,17 @@ export default function LandingPage() {
               <div style={{ fontSize: 18, fontWeight: 900, marginTop: 12 }}>{s.title}</div>
               <div style={{ fontSize: 13, color: C.muted, marginTop: 9, lineHeight: 1.8 }}>{s.desc}</div>
             </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── FAQ ── */}
+      <div id="faq" style={{ padding: "80px 48px", maxWidth: 800, margin: "0 auto" }}>
+        <div style={{ fontFamily: "'Roboto Mono', monospace", fontSize: 11, letterSpacing: 3, color: C.accent, fontWeight: 700 }}>FAQ</div>
+        <div style={{ fontSize: 28, fontWeight: 900, marginTop: 12, marginBottom: 40 }}>よくある質問</div>
+        <div>
+          {FAQ_ITEMS.map((item) => (
+            <FaqItem key={item.q} q={item.q} a={item.a} />
           ))}
         </div>
       </div>

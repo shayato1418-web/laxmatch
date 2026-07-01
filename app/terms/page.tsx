@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { useAuth } from "@/app/context/AuthContext";
 
 const C = {
   bg: "#0A0F1F",
@@ -35,8 +37,11 @@ const TERMS_DATA: Record<Tab, { n: string; h: string; body: string }[]> = {
   ],
 };
 
-export default function TermsPage({ searchParams }: { searchParams?: { tab?: string } }) {
-  const init: Tab = searchParams?.tab === "privacy" ? "プライバシーポリシー" : "利用規約";
+function TermsContent() {
+  const searchParams = useSearchParams();
+  const { user } = useAuth();
+  const logoHref = user ? "/explore" : "/lp";
+  const init: Tab = searchParams.get("tab") === "privacy" ? "プライバシーポリシー" : "利用規約";
   const [tab, setTab] = useState<Tab>(init);
 
   const sections = TERMS_DATA[tab];
@@ -45,7 +50,7 @@ export default function TermsPage({ searchParams }: { searchParams?: { tab?: str
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Noto Sans JP', sans-serif", display: "flex", flexDirection: "column" }}>
       {/* Navbar */}
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px 48px", borderBottom: `1px solid #141B2E`, flexShrink: 0 }}>
-        <Link href="/" style={{ fontFamily: "'Archivo', sans-serif", fontWeight: 900, fontSize: 20, letterSpacing: 0.5, color: C.text, textDecoration: "none" }}>
+        <Link href={logoHref} style={{ fontFamily: "'Archivo', sans-serif", fontWeight: 900, fontSize: 20, letterSpacing: 0.5, color: C.text, textDecoration: "none" }}>
           LAX<span style={{ color: C.accent }}>·</span>MATCH
         </Link>
         <Link href="/login" style={{ fontSize: 13.5, fontWeight: 700, color: C.dim, textDecoration: "none" }}>ログイン</Link>
@@ -96,5 +101,13 @@ export default function TermsPage({ searchParams }: { searchParams?: { tab?: str
         </div>
       </div>
     </div>
+  );
+}
+
+export default function TermsPage() {
+  return (
+    <Suspense>
+      <TermsContent />
+    </Suspense>
   );
 }

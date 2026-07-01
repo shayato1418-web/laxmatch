@@ -76,6 +76,7 @@ export default function MatchesPage() {
   const [rooms, setRooms] = useState<DbRoom[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("申請中");
+  const [cancelling, setCancelling] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     if (!user?.id) return;
@@ -90,6 +91,16 @@ export default function MatchesPage() {
   }, [user?.id, supabase]);
 
   useEffect(() => { void load(); }, [load]);
+
+  const cancelRequest = async (roomId: string) => {
+    if (cancelling.has(roomId)) return;
+    setCancelling((s) => new Set([...s, roomId]));
+    const { error } = await supabase.from("chat_rooms").delete().eq("id", roomId).eq("team_a_id", user?.id ?? "");
+    if (!error) {
+      setRooms((prev) => prev.filter((r) => r.id !== roomId));
+    }
+    setCancelling((s) => { const ns = new Set(s); ns.delete(roomId); return ns; });
+  };
 
   const pendingRooms  = useMemo(() => rooms.filter((r) => r.status === "pending"),  [rooms]);
   const activeRooms   = useMemo(() => rooms.filter((r) => r.status === "active"),   [rooms]);
@@ -111,17 +122,7 @@ export default function MatchesPage() {
 
   return (
     <div style={{ height: "100vh", display: "flex", background: C.bg, overflow: "hidden" }}>
-      {/* Chrome bar */}
-      <div className="chrome-bar" style={{ position: "fixed", top: 0, left: 0, right: 0, height: 42, background: C.header, borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", padding: "0 16px", gap: 10, zIndex: 50 }}>
-        <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
-          <div style={{ minWidth: 360, background: "#161E33", border: `1px solid ${C.border2}`, borderRadius: 8, padding: "6px 16px", fontFamily: "'Roboto Mono', monospace", fontSize: 11, color: C.muted, textAlign: "center" }}>
-            laxmatch.jp/matches
-          </div>
-        </div>
-        <div style={{ width: 54 }} />
-      </div>
-
-      <div className="app-body" style={{ display: "flex", flex: 1, paddingTop: 42, overflow: "hidden" }}>
+      <div className="app-body" style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         <Sidebar active="/matches" />
 
         <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -211,7 +212,18 @@ export default function MatchesPage() {
                             チャットへ ›
                           </Link>
                         ) : r.status === "pending" ? (
-                          <span style={{ fontSize: 12, color: C.muted }}>相手の承認待ち</span>
+                          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                            <span style={{ fontSize: 12, color: C.muted }}>相手の承認待ち</span>
+                            {r.team_a_id === user?.id && (
+                              <button
+                                onClick={() => { void cancelRequest(r.id); }}
+                                disabled={cancelling.has(r.id)}
+                                style={{ fontSize: 12, fontWeight: 700, color: "#FF5C6C", background: "transparent", border: "1px solid rgba(255,92,108,0.3)", borderRadius: 8, padding: "5px 10px", cursor: cancelling.has(r.id) ? "wait" : "pointer", opacity: cancelling.has(r.id) ? 0.6 : 1 }}
+                              >
+                                {cancelling.has(r.id) ? "取消中…" : "申請を取り消す"}
+                              </button>
+                            )}
+                          </div>
                         ) : (
                           <span style={{ fontSize: 12, color: C.red }}>却下されました</span>
                         )}

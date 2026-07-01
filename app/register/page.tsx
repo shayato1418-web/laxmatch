@@ -1,18 +1,28 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "@/app/context/AuthContext";
 
 type Role = "university" | "individual" | "manager";
 type ParticipantCategory = "個人" | "クラブチーム" | "OB会";
+
+const LEVEL_OPTIONS = ["入門", "初級", "中級", "上級", "強豪"];
+const AREA_OPTIONS = [
+  "北海道", "東北", "関東", "東海", "北陸", "近畿", "中国", "四国", "九州・沖縄",
+];
 
 function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const rawParam = searchParams.get("type") as Role | null;
   const typeParam = rawParam === "manager" ? null : rawParam;
-  const { register: registerUser, isLoading: authLoading } = useAuth();
+  const { register: registerUser, isLoading: authLoading, user } = useAuth();
+
+  useEffect(() => {
+    if (user) router.replace("/explore");
+  }, [user, router]);
 
   const [role, setRole] = useState<Role>(typeParam || "university");
   const [step, setStep] = useState<"role" | "info">(typeParam ? "info" : "role");
@@ -27,6 +37,7 @@ function RegisterForm() {
   const [memberCount, setMemberCount] = useState("");
   const [lineId, setLineId] = useState("");
   const [notes, setNotes] = useState("");
+  const [agreeTerms, setAgreeTerms] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [needsConfirmation, setNeedsConfirmation] = useState(false);
@@ -43,7 +54,7 @@ function RegisterForm() {
     setStep("info");
   };
 
-  const handleRegister = async (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
     setIsLoading(true);
@@ -78,14 +89,14 @@ function RegisterForm() {
         name: teamName,
         role,
         password,
+        area,
+        level,
+        gender,
+        lineId,
+        notes,
         ...(role === "individual" && {
           individualType,
-          area,
-          level,
-          gender,
           memberCount,
-          lineId,
-          notes,
         }),
       });
 
@@ -164,7 +175,7 @@ function RegisterForm() {
             ))}
           </div>
 
-          <div className="text-center">
+          <div className="text-center space-y-3">
             <p className="text-sm text-slate-400">
               すでにアカウントをお持ちですか？
               <button
@@ -174,6 +185,11 @@ function RegisterForm() {
               >
                 ログイン
               </button>
+            </p>
+            <p>
+              <Link href="/lp" className="text-sm text-slate-500 hover:text-slate-400 transition">
+                ← トップページへ戻る
+              </Link>
             </p>
           </div>
         </div>
@@ -257,33 +273,37 @@ function RegisterForm() {
               </label>
             </div>
 
-            {role === "individual" && (
+            {/* Extra fields for both university and individual */}
+            {(role === "university" || role === "individual") && (
               <>
-                <label className="block text-sm text-slate-300">
-                  <span className="font-semibold uppercase tracking-[0.15em]">種別</span>
-                  <select
-                    value={individualType}
-                    onChange={(e) => setIndividualType(e.target.value as ParticipantCategory)}
-                    className="mt-3 w-full rounded-[1.5rem] border border-slate-700 bg-slate-900 px-4 py-4 text-base text-white outline-none transition focus:border-[#4D5BFF] focus:ring-2 focus:ring-[#4D5BFF]/20"
-                    disabled={isLoading || authLoading}
-                  >
-                    <option value="個人">個人</option>
-                    <option value="クラブチーム">クラブチーム</option>
-                    <option value="OB会">OB会</option>
-                  </select>
-                </label>
+                {role === "individual" && (
+                  <label className="block text-sm text-slate-300">
+                    <span className="font-semibold uppercase tracking-[0.15em]">種別</span>
+                    <select
+                      value={individualType}
+                      onChange={(e) => setIndividualType(e.target.value as ParticipantCategory)}
+                      className="mt-3 w-full rounded-[1.5rem] border border-slate-700 bg-slate-900 px-4 py-4 text-base text-white outline-none transition focus:border-[#4D5BFF] focus:ring-2 focus:ring-[#4D5BFF]/20"
+                      disabled={isLoading || authLoading}
+                    >
+                      <option value="個人">個人</option>
+                      <option value="クラブチーム">クラブチーム</option>
+                      <option value="OB会">OB会</option>
+                    </select>
+                  </label>
+                )}
 
                 <div className="grid gap-4 md:grid-cols-2">
                   <label className="block text-sm text-slate-300">
                     <span className="font-semibold uppercase tracking-[0.15em]">地域</span>
-                    <input
-                      type="text"
+                    <select
                       value={area}
                       onChange={(e) => setArea(e.target.value)}
                       className="mt-3 w-full rounded-[1.5rem] border border-slate-700 bg-slate-900 px-4 py-4 text-base text-white outline-none transition focus:border-[#4D5BFF] focus:ring-2 focus:ring-[#4D5BFF]/20"
-                      placeholder="例: 関西"
                       disabled={isLoading || authLoading}
-                    />
+                    >
+                      <option value="">選択してください</option>
+                      {AREA_OPTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+                    </select>
                   </label>
                   <label className="block text-sm text-slate-300">
                     <span className="font-semibold uppercase tracking-[0.15em]">レベル</span>
@@ -293,9 +313,7 @@ function RegisterForm() {
                       className="mt-3 w-full rounded-[1.5rem] border border-slate-700 bg-slate-900 px-4 py-4 text-base text-white outline-none transition focus:border-[#4D5BFF] focus:ring-2 focus:ring-[#4D5BFF]/20"
                       disabled={isLoading || authLoading}
                     >
-                      <option>初級</option>
-                      <option>中級</option>
-                      <option>強豪</option>
+                      {LEVEL_OPTIONS.map((l) => <option key={l} value={l}>{l}</option>)}
                     </select>
                   </label>
                 </div>
@@ -314,17 +332,19 @@ function RegisterForm() {
                       <option>女子</option>
                     </select>
                   </label>
-                  <label className="block text-sm text-slate-300">
-                    <span className="font-semibold uppercase tracking-[0.15em]">人数</span>
-                    <input
-                      type="text"
-                      value={memberCount}
-                      onChange={(e) => setMemberCount(e.target.value)}
-                      className="mt-3 w-full rounded-[1.5rem] border border-slate-700 bg-slate-900 px-4 py-4 text-base text-white outline-none transition focus:border-[#4D5BFF] focus:ring-2 focus:ring-[#4D5BFF]/20"
-                      placeholder="任意"
-                      disabled={isLoading || authLoading}
-                    />
-                  </label>
+                  {role === "individual" && (
+                    <label className="block text-sm text-slate-300">
+                      <span className="font-semibold uppercase tracking-[0.15em]">人数</span>
+                      <input
+                        type="text"
+                        value={memberCount}
+                        onChange={(e) => setMemberCount(e.target.value)}
+                        className="mt-3 w-full rounded-[1.5rem] border border-slate-700 bg-slate-900 px-4 py-4 text-base text-white outline-none transition focus:border-[#4D5BFF] focus:ring-2 focus:ring-[#4D5BFF]/20"
+                        placeholder="任意"
+                        disabled={isLoading || authLoading}
+                      />
+                    </label>
+                  )}
                 </div>
 
                 <label className="block text-sm text-slate-300">
@@ -353,16 +373,38 @@ function RegisterForm() {
               </>
             )}
 
+            {/* Terms agreement */}
+            <label className="flex items-start gap-3 cursor-pointer">
+              <div
+                onClick={() => setAgreeTerms((v) => !v)}
+                style={{
+                  width: 18, height: 18, borderRadius: 5, flexShrink: 0, marginTop: 2,
+                  background: agreeTerms ? "#4D5BFF" : "transparent",
+                  border: `2px solid ${agreeTerms ? "#4D5BFF" : "#475569"}`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  cursor: "pointer",
+                }}
+              >
+                {agreeTerms && <span style={{ color: "#fff", fontSize: 11, fontWeight: 900 }}>✓</span>}
+              </div>
+              <span className="text-sm text-slate-400 leading-6">
+                <Link href="/terms" target="_blank" className="text-[#4D5BFF] hover:underline">利用規約</Link>
+                {" "}および{" "}
+                <Link href="/privacy" target="_blank" className="text-[#4D5BFF] hover:underline">プライバシーポリシー</Link>
+                {" "}に同意します
+              </span>
+            </label>
+
             <button
               type="submit"
-              disabled={isLoading || authLoading}
+              disabled={isLoading || authLoading || !agreeTerms}
               className="w-full rounded-[1.75rem] bg-gradient-to-r from-[#4D5BFF] to-[#60a5fa] px-6 py-4 text-base font-semibold text-white shadow-lg shadow-[#4D5BFF]/25 transition duration-300 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading || authLoading ? "登録中..." : "登録を完了"}
             </button>
           </form>
 
-          <div className="text-center">
+          <div className="text-center space-y-3">
             <p className="text-sm text-slate-400">
               すでにアカウントをお持ちですか？
               <button
@@ -372,6 +414,11 @@ function RegisterForm() {
               >
                 ログイン
               </button>
+            </p>
+            <p>
+              <Link href="/lp" className="text-sm text-slate-500 hover:text-slate-400 transition">
+                ← トップページへ戻る
+              </Link>
             </p>
           </div>
         </div>

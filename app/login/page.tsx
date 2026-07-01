@@ -26,13 +26,11 @@ function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
-  const [remember, setRemember] = useState(true);
+  const [remember, setRemember] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
+  const doLogin = async () => {
     if (!email.trim() || !password.trim()) {
       setError("メールアドレスとパスワードを入力してください。");
       return;
@@ -50,23 +48,18 @@ function LoginForm() {
     }
   };
 
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setError("");
+    await doLogin();
+  };
+
   const busy = loading || authLoading;
 
   return (
     <div className="login-bg-mobile" style={{ minHeight: "100vh", background: C.bg, display: "flex", flexDirection: "column" }}>
-      {/* Chrome bar */}
-      <div className="chrome-bar" style={{ height: 42, background: C.panel, borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", padding: "0 16px", gap: 10, flexShrink: 0 }}>
-
-        <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
-          <div style={{ minWidth: 360, background: "#161E33", border: `1px solid ${C.border2}`, borderRadius: 8, padding: "6px 16px", fontFamily: "'Roboto Mono', monospace", fontSize: 11, color: C.muted, textAlign: "center" }}>
-            laxmatch.jp/login
-          </div>
-        </div>
-        <div style={{ width: 54 }} />
-      </div>
-
       {/* Body */}
-      <div className="login-body" style={{ flex: 1, display: "grid", gridTemplateColumns: "1.1fr 1fr", overflow: "hidden" }}>
+      <div className="login-body" style={{ flex: 1, display: "grid", gridTemplateColumns: "1.1fr 1fr", overflow: "hidden", minHeight: "100vh" }}>
 
         {/* Left panel — visual */}
         <div className="login-left" style={{
@@ -79,9 +72,9 @@ function LoginForm() {
           <div style={{ position: "absolute", inset: 0, background: "radial-gradient(circle at 30% 60%, rgba(77,91,255,0.20) 0%, transparent 55%), radial-gradient(circle at 80% 20%, rgba(37,208,125,0.08) 0%, transparent 45%)" }} />
 
           {/* Logo */}
-          <div style={{ position: "absolute", left: 48, top: 44, fontFamily: "'Archivo', sans-serif", fontWeight: 900, fontSize: 23, letterSpacing: 0.5, zIndex: 1 }}>
+          <Link href="/lp" style={{ position: "absolute", left: 48, top: 44, fontFamily: "'Archivo', sans-serif", fontWeight: 900, fontSize: 23, letterSpacing: 0.5, zIndex: 1, color: C.text, textDecoration: "none" }}>
             LAX<span style={{ color: C.accent }}>·</span>MATCH
-          </div>
+          </Link>
 
           {/* Bottom text */}
           <div style={{ position: "absolute", left: 48, bottom: 56, zIndex: 1 }}>
@@ -97,7 +90,7 @@ function LoginForm() {
           <div className="login-mobile-logo" style={{ display: "none", fontFamily: "'Archivo', sans-serif", fontWeight: 900, fontSize: 17, letterSpacing: 0.5, marginBottom: 0 }}>
             LAX<span style={{ color: C.accent }}>·</span>MATCH
           </div>
-          {/* Mobile hero — 44px "WELCOME BACK" with gradient */}
+          {/* Mobile hero */}
           <div className="login-hero" style={{ display: "none" }}>
             <div style={{ fontFamily: "'Archivo', sans-serif", fontWeight: 900, fontSize: 44, lineHeight: 0.95, letterSpacing: "-1.5px", textTransform: "uppercase", marginTop: 26, marginBottom: 18 }}>
               WELCOME<br />
@@ -119,7 +112,7 @@ function LoginForm() {
             <div>
               <div style={{ fontFamily: "'Roboto Mono', monospace", fontSize: 10, letterSpacing: 2, color: C.muted2, fontWeight: 600 }}>EMAIL / ID</div>
               <input
-                type="text"
+                type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={busy}
@@ -169,7 +162,7 @@ function LoginForm() {
                 <div style={{ width: 16, height: 16, borderRadius: 5, background: remember ? C.accent : "transparent", border: `1px solid ${remember ? C.accent : C.border2}` }} />
                 ログイン状態を保持
               </label>
-              <a href="#" style={{ fontSize: 12.5, color: C.muted, textDecoration: "none" }}>パスワードを忘れた方</a>
+              <Link href="/forgot-password" style={{ fontSize: 12.5, color: C.muted, textDecoration: "none" }}>パスワードを忘れた方</Link>
             </div>
 
             {/* Submit */}
@@ -198,12 +191,13 @@ function LoginForm() {
             <div style={{ flex: 1, height: 1, background: C.border2 }} />
           </div>
 
-          {/* University email */}
+          {/* University email login */}
           <button
             type="button"
-            onClick={() => router.push("/register?type=university")}
+            onClick={() => { setError(""); void doLogin(); }}
+            disabled={busy}
             className="login-register-btn"
-            style={{ border: `1px solid #2C3658`, borderRadius: 13, padding: 15, textAlign: "center", fontWeight: 700, fontSize: 14, color: C.dim, background: "none", cursor: "pointer", width: "100%" }}
+            style={{ border: `1px solid #2C3658`, borderRadius: 13, padding: 15, textAlign: "center", fontWeight: 700, fontSize: 14, color: C.dim, background: "none", cursor: busy ? "not-allowed" : "pointer", width: "100%", opacity: busy ? 0.7 : 1 }}
           >
             大学メールアドレスで続ける
           </button>
@@ -212,6 +206,11 @@ function LoginForm() {
           <div style={{ marginTop: 26, textAlign: "center", fontSize: 13, color: C.muted }}>
             アカウントがない方は{" "}
             <Link href="/register" style={{ color: C.accent, fontWeight: 700, textDecoration: "none" }}>新規登録</Link>
+          </div>
+
+          {/* Back to top */}
+          <div style={{ marginTop: 16, textAlign: "center" }}>
+            <Link href="/lp" style={{ fontSize: 12, color: C.muted, textDecoration: "none" }}>← トップページへ戻る</Link>
           </div>
         </div>
       </div>

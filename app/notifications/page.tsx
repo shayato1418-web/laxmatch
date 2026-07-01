@@ -171,17 +171,7 @@ export default function NotificationsPage() {
 
   return (
     <div style={{ height: "100vh", display: "flex", background: C.bg, overflow: "hidden" }}>
-      {/* Chrome bar */}
-      <div className="chrome-bar" style={{ position: "fixed", top: 0, left: 0, right: 0, height: 42, background: C.header, borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", padding: "0 16px", gap: 10, zIndex: 50 }}>
-        <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
-          <div style={{ minWidth: 360, background: "#161E33", border: `1px solid ${C.border2}`, borderRadius: 8, padding: "6px 16px", fontFamily: "'Roboto Mono', monospace", fontSize: 11, color: C.muted, textAlign: "center" }}>
-            laxmatch.jp/notifications
-          </div>
-        </div>
-        <div style={{ width: 54 }} />
-      </div>
-
-      <div className="app-body" style={{ display: "flex", flex: 1, paddingTop: 42, overflow: "hidden" }}>
+      <div className="app-body" style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         <Sidebar active="/notifications" />
 
         <main className="app-scroll" style={{ flex: 1, overflowY: "auto", padding: "28px 32px" }}>
@@ -196,7 +186,21 @@ export default function NotificationsPage() {
           </div>
 
           {loading ? (
-            <div style={{ textAlign: "center", padding: "60px 0", color: C.muted, fontSize: 14 }}>読み込み中…</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {[0, 1, 2].map((i) => (
+                <div key={i} style={{ background: C.card, border: `1px solid ${C.cardBorder}`, borderRadius: 16, padding: "18px 22px", display: "flex", alignItems: "center", gap: 16 }}>
+                  <div style={{ width: 48, height: 48, borderRadius: 13, background: "#1F2740", flexShrink: 0 }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ height: 16, width: `${55 + i * 15}%`, background: "#1F2740", borderRadius: 6, marginBottom: 10 }} />
+                    <div style={{ height: 11, width: "40%", background: "#161E33", borderRadius: 6 }} />
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <div style={{ width: 84, height: 40, borderRadius: 10, background: "#1F2740" }} />
+                    <div style={{ width: 64, height: 40, borderRadius: 10, background: "#161E33" }} />
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : (
             <>
               {/* Pending requests */}

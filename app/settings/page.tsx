@@ -38,9 +38,10 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function TextInput({ value, onChange, placeholder, disabled }: { value: string; onChange: (v: string) => void; placeholder?: string; disabled?: boolean }) {
+function TextInput({ value, onChange, placeholder, disabled, type }: { value: string; onChange: (v: string) => void; placeholder?: string; disabled?: boolean; type?: string }) {
   return (
     <input
+      type={type ?? "text"}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
@@ -137,17 +138,7 @@ export default function SettingsPage() {
 
   return (
     <div style={{ height: "100vh", display: "flex", background: C.bg, overflow: "hidden" }}>
-      {/* Chrome bar */}
-      <div className="chrome-bar" style={{ position: "fixed", top: 0, left: 0, right: 0, height: 42, background: C.header, borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", padding: "0 16px", gap: 10, zIndex: 50 }}>
-        <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
-          <div style={{ minWidth: 360, background: "#161E33", border: `1px solid ${C.border2}`, borderRadius: 8, padding: "6px 16px", fontFamily: "'Roboto Mono', monospace", fontSize: 11, color: C.muted, textAlign: "center" }}>
-            laxmatch.jp/settings
-          </div>
-        </div>
-        <div style={{ width: 54 }} />
-      </div>
-
-      <div className="app-body" style={{ display: "flex", flex: 1, paddingTop: 42, overflow: "hidden" }}>
+      <div className="app-body" style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         <Sidebar active="/settings" />
 
         <main className="app-scroll" style={{ flex: 1, overflowY: "auto", padding: "36px 48px" }}>
@@ -241,15 +232,15 @@ export default function SettingsPage() {
               </div>
 
               <Field label="現在のパスワード">
-                <TextInput value={currentPw} onChange={setCurrentPw} placeholder="••••••••" />
+                <TextInput value={currentPw} onChange={setCurrentPw} placeholder="••••••••" type="password" />
               </Field>
 
               <Field label="新しいパスワード">
-                <TextInput value={newPw} onChange={setNewPw} placeholder="6文字以上" />
+                <TextInput value={newPw} onChange={setNewPw} placeholder="6文字以上" type="password" />
               </Field>
 
               <Field label="新しいパスワード（確認）">
-                <TextInput value={confirmPw} onChange={setConfirmPw} placeholder="もう一度入力" />
+                <TextInput value={confirmPw} onChange={setConfirmPw} placeholder="もう一度入力" type="password" />
               </Field>
 
               {pwMsg && (

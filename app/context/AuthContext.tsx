@@ -43,6 +43,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   updateProfile: (updates: Partial<Pick<User, 'name' | 'area' | 'level' | 'lineId' | 'notes'>>) => Promise<void>;
   changePassword: (currentPw: string, newPw: string) => Promise<void>;
+  resetPasswordForEmail: (email: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -351,8 +352,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw new Error(error.message);
   };
 
+  const resetPasswordForEmail = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    if (error) throw new Error(error.message);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, impersonation, login, impersonate, returnToAdmin, register, logout, updateProfile, changePassword }}>
+    <AuthContext.Provider value={{ user, isLoading, impersonation, login, impersonate, returnToAdmin, register, logout, updateProfile, changePassword, resetPasswordForEmail }}>
       {children}
     </AuthContext.Provider>
   );

@@ -73,6 +73,7 @@ export default function ExplorePage() {
   const [search, setSearch] = useState("");
   const [filterRegion, setFilterRegion] = useState("");
   const [filterLevel, setFilterLevel] = useState("");
+  const [filterGender, setFilterGender] = useState("");
   const [toast, setToast] = useState<Toast | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -153,29 +154,21 @@ export default function ExplorePage() {
   // Derived filter data
   const regions = useMemo(() => [...new Set(profiles.map((p) => p.region).filter(Boolean))], [profiles]);
   const levels = useMemo(() => [...new Set(profiles.map((p) => p.level).filter(Boolean))], [profiles]);
+  const genders = useMemo(() => [...new Set(profiles.map((p) => p.gender).filter(Boolean))], [profiles]);
 
   const filtered = useMemo(() => {
     return profiles.filter((p) => {
       if (search && !p.university_name.includes(search) && !p.region.includes(search)) return false;
       if (filterRegion && p.region !== filterRegion) return false;
       if (filterLevel && p.level !== filterLevel) return false;
+      if (filterGender && p.gender !== filterGender) return false;
       return true;
     });
-  }, [profiles, search, filterRegion, filterLevel]);
+  }, [profiles, search, filterRegion, filterLevel, filterGender]);
 
   return (
     <div style={{ height: "100vh", display: "flex", background: C.bg, overflow: "hidden" }}>
-      {/* Chrome bar */}
-      <div className="chrome-bar" style={{ position: "fixed", top: 0, left: 0, right: 0, height: 42, background: C.header, borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", padding: "0 16px", gap: 10, zIndex: 50 }}>
-        <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
-          <div style={{ minWidth: 360, background: "#161E33", border: `1px solid ${C.border2}`, borderRadius: 8, padding: "6px 16px", fontFamily: "'Roboto Mono', monospace", fontSize: 11, color: C.muted, textAlign: "center" }}>
-            laxmatch.jp/explore
-          </div>
-        </div>
-        <div style={{ width: 54 }} />
-      </div>
-
-      <div className="app-body" style={{ display: "flex", flex: 1, paddingTop: 42, overflow: "hidden" }}>
+      <div className="app-body" style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         <Sidebar active="/explore" />
 
         <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -216,8 +209,16 @@ export default function ExplorePage() {
                 </button>
               );
             })}
-            {(filterRegion || filterLevel) && (
-              <button onClick={() => { setFilterRegion(""); setFilterLevel(""); }} style={{ background: "transparent", color: C.muted, fontSize: 12, padding: "8px 12px", borderRadius: 20, border: `1px solid ${C.border2}`, cursor: "pointer" }}>
+            {genders.map((g) => {
+              const active = filterGender === g;
+              return (
+                <button key={g} onClick={() => setFilterGender(active ? "" : g)} style={{ background: active ? C.green : "#161E33", color: active ? "#fff" : C.dim, fontSize: 13, fontWeight: 700, padding: "8px 14px", borderRadius: 20, border: active ? "none" : `1px solid ${C.border2}`, cursor: "pointer" }}>
+                  {g}
+                </button>
+              );
+            })}
+            {(filterRegion || filterLevel || filterGender) && (
+              <button onClick={() => { setFilterRegion(""); setFilterLevel(""); setFilterGender(""); }} style={{ background: "transparent", color: C.muted, fontSize: 12, padding: "8px 12px", borderRadius: 20, border: `1px solid ${C.border2}`, cursor: "pointer" }}>
                 ✕ リセット
               </button>
             )}
@@ -253,7 +254,7 @@ export default function ExplorePage() {
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 15, fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.university_name}</div>
-                          <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{p.gender || "—"}</div>
+                          {p.gender && <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{p.gender}</div>}
                         </div>
                       </div>
 

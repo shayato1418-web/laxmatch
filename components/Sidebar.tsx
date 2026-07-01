@@ -116,7 +116,7 @@ export default function Sidebar({ active }: { active: string }) {
         flexDirection: "column",
         height: "100%",
       }}>
-        <Link href="/" style={{
+        <Link href="/explore" style={{
           fontFamily: "'Archivo', sans-serif",
           fontWeight: 900,
           fontSize: 19,
