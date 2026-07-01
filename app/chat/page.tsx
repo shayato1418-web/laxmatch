@@ -83,9 +83,22 @@ export default function ChatPage() {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [mobileView, setMobileView] = useState<"list" | "chat">("list");
+  const [showEmoji, setShowEmoji] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const emojiRef = useRef<HTMLDivElement>(null);
 
   const active = convs.length > 0 ? convs[activeIdx] : null;
+
+  const EMOJIS = ["😊","😂","🙏","👍","❤️","🎉","🔥","💪","😅","🤝","✅","👋","😎","🏑","⚡","🎯"];
+
+  useEffect(() => {
+    if (!showEmoji) return;
+    const handler = (e: MouseEvent) => {
+      if (emojiRef.current && !emojiRef.current.contains(e.target as Node)) setShowEmoji(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showEmoji]);
 
   useEffect(() => {
     if (active) messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -324,8 +337,30 @@ export default function ChatPage() {
 
                   {/* Input bar */}
                   <div style={{ padding: "12px 20px 16px", borderTop: `1px solid ${C.border}`, flexShrink: 0, display: "flex", gap: 10, alignItems: "center" }}>
-                    <div style={{ width: 38, height: 38, borderRadius: 10, background: "#161E33", border: `1px solid ${C.border2}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, color: C.muted, flexShrink: 0, cursor: "pointer" }}>
-                      +
+                    <div ref={emojiRef} style={{ position: "relative", flexShrink: 0 }}>
+                      <button
+                        type="button"
+                        onClick={() => setShowEmoji((v) => !v)}
+                        style={{ width: 38, height: 38, borderRadius: 10, background: showEmoji ? C.accent : "#161E33", border: `1px solid ${showEmoji ? C.accent : C.border2}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, color: showEmoji ? "#fff" : C.muted, cursor: "pointer" }}
+                      >
+                        +
+                      </button>
+                      {showEmoji && (
+                        <div style={{ position: "absolute", bottom: 48, left: 0, background: "#111728", border: `1px solid ${C.border2}`, borderRadius: 14, padding: 10, display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 4, zIndex: 100, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
+                          {EMOJIS.map((emoji) => (
+                            <button
+                              key={emoji}
+                              type="button"
+                              onClick={() => { setDraft((d) => d + emoji); setShowEmoji(false); }}
+                              style={{ width: 38, height: 38, fontSize: 20, background: "transparent", border: "none", cursor: "pointer", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}
+                              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#1A2340"; }}
+                              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+                            >
+                              {emoji}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <input
                       value={draft}

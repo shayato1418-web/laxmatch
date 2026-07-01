@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth, ADMIN_EMAILS } from "@/app/context/AuthContext";
+import { createClient } from "@/lib/supabase/client";
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -235,17 +236,20 @@ function TabBar({ tabs, active, setActive }: { tabs: { value: string; label: str
 }
 
 // ─── Section ①: Dashboard ────────────────────────────────────────────────────
-function Dashboard({ users, matches }: { users: AdminUser[]; matches: Match[] }) {
-  const confirmed = matches.filter((m) => m.status === "confirmed").length;
-  const thisWeek = matches.filter((m) => m.createdAt >= "2026/06/23").length;
+type DbStats = { userCount: number; activeMatchCount: number; weekRequestCount: number };
+
+function Dashboard({ users, matches, dbStats }: { users: AdminUser[]; matches: Match[]; dbStats?: DbStats }) {
+  const confirmed = dbStats?.activeMatchCount ?? matches.filter((m) => m.status === "confirmed").length;
+  const thisWeek = dbStats?.weekRequestCount ?? 0;
+  const totalUsers = dbStats?.userCount ?? users.filter((u) => u.role !== "manager").length;
   return (
     <div>
       <SectionHeader title="ダッシュボード" sub="サービス全体の状況を確認できます" />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 28 }}>
-        <StatCard label="登録チーム数"     value={users.filter((u) => u.role !== "manager").length} sub="全チーム・個人" color={C.accent} />
-        <StatCard label="マッチング成立数" value={confirmed} sub="全期間"      color={C.green}  />
-        <StatCard label="今週の募集件数"   value={thisWeek}  sub="6/23〜6/29"  color={C.yellow} />
-        <StatCard label="累計利用者数"     value={users.length} sub="全ロール" color={C.dim}    />
+        <StatCard label="登録チーム数"     value={totalUsers}  sub="全チーム・個人" color={C.accent} />
+        <StatCard label="マッチング成立数" value={confirmed}   sub="全期間"         color={C.green}  />
+        <StatCard label="今週の申請件数"   value={thisWeek}    sub="直近7日間"       color={C.yellow} />
+        <StatCard label="累計利用者数"     value={dbStats?.userCount ?? users.length} sub="全ロール" color={C.dim} />
       </div>
 
       <div style={{ background: C.card, border: `1px solid ${C.cardB}`, borderRadius: 14, overflow: "hidden" }}>
@@ -271,6 +275,7 @@ function Dashboard({ users, matches }: { users: AdminUser[]; matches: Match[] })
 // ─── Section ②: User Management ──────────────────────────────────────────────
 function UserManagement({ users, setUsers }: { users: AdminUser[]; setUsers: Dispatch<SetStateAction<AdminUser[]>> }) {
   const { impersonation, impersonate } = useAuth();
+  const supabase = useMemo(() => createClient(), []);
   const [search, setSearch] = useState("");
   const [passwordModalUserId, setPasswordModalUserId] = useState<string | null>(null);
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -282,8 +287,10 @@ function UserManagement({ users, setUsers }: { users: AdminUser[]; setUsers: Dis
   const closePasswordModal = () => setPasswordModalUserId(null);
   const passwordModalUser = users.find((u) => u.id === passwordModalUserId) ?? null;
 
-  const setStatus = (id: string, status: UserStatus) =>
+  const setStatus = async (id: string, status: UserStatus) => {
     setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, status } : u)));
+    await supabase.from("profiles").update({ is_suspended: status === "suspended" }).eq("user_id", id);
+  };
   const toggleFlag = (id: string) =>
     setUsers((prev) => prev.map((u) => u.id === id ? { ...u, flagged: !u.flagged, status: (u.flagged ? "active" : "flagged") as UserStatus } : u));
   const deleteUser = (id: string) => {
@@ -441,8 +448,38 @@ function MatchManagement({ matches, setMatches }: { matches: Match[]; setMatches
 
 // ─── Section ④: Chat Monitor ─────────────────────────────────────────────────
 function ChatMonitor({ rooms, setRooms }: { rooms: ChatRoom[]; setRooms: Dispatch<SetStateAction<ChatRoom[]>> }) {
+  const supabase = useMemo(() => createClient(), []);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [loadingMsgs, setLoadingMsgs] = useState(false);
   const room = rooms.find((r) => r.id === selectedId);
+
+  const selectRoom = async (id: string) => {
+    setSelectedId(id);
+    const existingRoom = rooms.find((r) => r.id === id);
+    if (existingRoom && existingRoom.messages.length > 0) return;
+    setLoadingMsgs(true);
+    const { data } = await supabase
+      .from("messages")
+      .select("id, sender_id, content, created_at")
+      .eq("room_id", id)
+      .order("created_at", { ascending: true });
+    setLoadingMsgs(false);
+    if (!data) return;
+    setRooms((prev) =>
+      prev.map((r) =>
+        r.id !== id ? r : {
+          ...r,
+          msgCount: data.length,
+          lastMsg: data[data.length - 1]?.content ?? "",
+          messages: (data as { id: string; sender_id: string; content: string; created_at: string }[]).map((m) => ({
+            from: m.sender_id,
+            text: m.content,
+            time: new Date(m.created_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
+          })),
+        }
+      )
+    );
+  };
 
   const deleteMsg = (roomId: string, idx: number) =>
     setRooms((prev) =>
@@ -462,10 +499,13 @@ function ChatMonitor({ rooms, setRooms }: { rooms: ChatRoom[]; setRooms: Dispatc
       <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 16 }}>
         {/* Room list */}
         <div style={{ background: C.card, border: `1px solid ${C.cardB}`, borderRadius: 14, overflow: "hidden" }}>
+          {rooms.length === 0 && (
+            <div style={{ padding: 24, textAlign: "center", color: C.muted, fontSize: 13 }}>チャットルームがありません</div>
+          )}
           {rooms.map((r) => (
             <button
               key={r.id}
-              onClick={() => setSelectedId(r.id)}
+              onClick={() => { void selectRoom(r.id); }}
               style={{
                 width: "100%", padding: "14px 16px", display: "flex", flexDirection: "column", gap: 4,
                 background: selectedId === r.id ? "#161E33" : "transparent",
@@ -489,6 +529,10 @@ function ChatMonitor({ rooms, setRooms }: { rooms: ChatRoom[]; setRooms: Dispatc
           {!room ? (
             <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: C.muted, fontSize: 13, padding: 40 }}>
               ← ルームを選択してください
+            </div>
+          ) : loadingMsgs ? (
+            <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: C.muted, fontSize: 13, padding: 40 }}>
+              メッセージを読み込み中…
             </div>
           ) : (
             <>
@@ -805,12 +849,14 @@ type SectionId = (typeof NAV)[number]["id"];
 export default function AdminPage() {
   const { user, isLoading, logout } = useAuth();
   const router = useRouter();
+  const supabase = useMemo(() => createClient(), []);
   const [section, setSection] = useState<SectionId>("dashboard");
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
   const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
+  const [dbStats, setDbStats] = useState<DbStats | undefined>(undefined);
 
   const isAdmin = (ADMIN_EMAILS as readonly string[]).includes(user?.email || "") || user?.role === "manager";
 
@@ -819,16 +865,56 @@ export default function AdminPage() {
   }, [user, isLoading, isAdmin, router]);
 
   useEffect(() => {
-    const stored = JSON.parse(localStorage.getItem("users") || "[]") as Array<{
-      id: string; email: string; password: string; name: string; role: UserRole;
-    }>;
-    setUsers(
-      stored.map((u) => ({
-        id: u.id, name: u.name, email: u.email, password: u.password, role: u.role,
-        area: "未設定", registeredAt: new Date().toLocaleDateString("ja-JP"), lastLogin: "—", status: "active" as UserStatus, flagged: false,
-      }))
-    );
-  }, []);
+    if (!isAdmin) return;
+    const loadDb = async () => {
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+      const [profilesRes, activeRoomsRes, weekRoomsRes, allRoomsRes] = await Promise.all([
+        supabase.from("profiles").select("user_id, university_name, region, level, gender, is_suspended, is_public"),
+        supabase.from("chat_rooms").select("id", { count: "exact", head: true }).eq("status", "active"),
+        supabase.from("chat_rooms").select("id", { count: "exact", head: true }).gte("created_at", weekAgo),
+        supabase.from("chat_rooms").select("id, team_a_name, team_b_name, status, created_at").order("created_at", { ascending: false }),
+      ]);
+
+      const profiles = profilesRes.data ?? [];
+      setUsers(
+        profiles.map((p: { user_id: string; university_name: string; region: string; level: string; gender: string; is_suspended: boolean | null; is_public: boolean }) => ({
+          id: p.user_id,
+          name: p.university_name || "—",
+          email: "—",
+          password: "—",
+          role: "university" as UserRole,
+          area: p.region || "—",
+          registeredAt: "—",
+          lastLogin: "—",
+          status: p.is_suspended ? "suspended" as UserStatus : "active" as UserStatus,
+          flagged: false,
+        }))
+      );
+
+      setDbStats({
+        userCount: profiles.length,
+        activeMatchCount: activeRoomsRes.count ?? 0,
+        weekRequestCount: weekRoomsRes.count ?? 0,
+      });
+
+      const rooms = allRoomsRes.data ?? [];
+      setChatRooms(
+        rooms.map((r: { id: string; team_a_name: string; team_b_name: string; status: string; created_at: string }) => ({
+          id: r.id,
+          teamA: r.team_a_name,
+          teamB: r.team_b_name,
+          lastMsg: "",
+          lastMsgTime: r.created_at,
+          msgCount: 0,
+          flagged: false,
+          messages: [],
+        }))
+      );
+    };
+    void loadDb();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin]);
 
   if (isLoading || !user || !isAdmin) {
     return (
@@ -906,7 +992,7 @@ export default function AdminPage() {
 
         {/* Main content */}
         <main style={{ flex: 1, overflowY: "auto", padding: "28px 32px" }}>
-          {section === "dashboard"     && <Dashboard users={users} matches={matches} />}
+          {section === "dashboard"     && <Dashboard users={users} matches={matches} dbStats={dbStats} />}
           {section === "users"         && <UserManagement users={users} setUsers={setUsers} />}
           {section === "matches"       && <MatchManagement matches={matches} setMatches={setMatches} />}
           {section === "chats"         && <ChatMonitor rooms={chatRooms} setRooms={setChatRooms} />}

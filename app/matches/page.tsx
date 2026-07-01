@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import { useAuth } from "@/app/context/AuthContext";
@@ -72,6 +73,7 @@ function statusMeta(status: string): { label: string; color: string; border: str
 export default function MatchesPage() {
   const { user } = useAuth();
   const supabase = useMemo(() => createClient(), []);
+  const router = useRouter();
 
   const [rooms, setRooms] = useState<DbRoom[]>([]);
   const [loading, setLoading] = useState(true);
@@ -182,7 +184,17 @@ export default function MatchesPage() {
                   const name = opponentName(r);
                   const meta = statusMeta(r.status);
                   return (
-                    <div key={r.id} className="app-card" style={{ background: C.card, border: `1px solid ${C.cardBorder}`, borderRadius: 16, padding: 20, position: "relative", overflow: "hidden" }}>
+                    <div
+                      key={r.id}
+                      className="app-card"
+                      style={{ background: C.card, border: `1px solid ${C.cardBorder}`, borderRadius: 16, padding: 20, position: "relative", overflow: "hidden", cursor: "pointer" }}
+                      onClick={(e) => {
+                        const target = e.target as HTMLElement;
+                        if (target.closest("button") || target.closest("a")) return;
+                        const opponentId = r.team_a_id === user?.id ? r.team_b_id : r.team_a_id;
+                        router.push(`/profile/${opponentId}`);
+                      }}
+                    >
                       <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: meta.color }} />
 
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>

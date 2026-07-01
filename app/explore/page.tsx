@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import Sidebar from "@/components/Sidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import { useAuth } from "@/app/context/AuthContext";
@@ -59,8 +60,6 @@ type Profile = {
 
 type RoomStatus = "applied" | "matched" | null;
 
-type Toast = { type: "ok" | "err"; text: string };
-
 export default function ExplorePage() {
   const { user } = useAuth();
   const supabase = useMemo(() => createClient(), []);
@@ -68,14 +67,12 @@ export default function ExplorePage() {
 
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [roomStatuses, setRoomStatuses] = useState<Map<string, RoomStatus>>(new Map());
-  const [applying, setApplying] = useState<Set<string>>(new Set());
+  const [overlapMap, setOverlapMap] = useState<Map<string, boolean>>(new Map());
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterRegion, setFilterRegion] = useState("");
   const [filterLevel, setFilterLevel] = useState("");
   const [filterGender, setFilterGender] = useState("");
-  const [toast, setToast] = useState<Toast | null>(null);
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
     if (!user?.id) return;
@@ -90,27 +87,41 @@ export default function ExplorePage() {
       if (profs) {
         setProfiles(profs as Profile[]);
 
-        // Check existing rooms for each profile
         const ids = profs.map((p: Profile) => p.user_id);
-        if (ids.length > 0) {
-          const [{ data: roomsAB }, { data: roomsBA }] = await Promise.all([
-            supabase.from("chat_rooms").select("id, team_b_id, status").eq("team_a_id", user.id),
-            supabase.from("chat_rooms").select("id, team_a_id, status").eq("team_b_id", user.id),
-          ]);
 
-          const statusMap = new Map<string, RoomStatus>();
-          (roomsAB ?? []).forEach((r: { team_b_id: string; status: string }) => {
-            if (ids.includes(r.team_b_id)) {
-              statusMap.set(r.team_b_id, r.status === "active" ? "matched" : "applied");
-            }
-          });
-          (roomsBA ?? []).forEach((r: { team_a_id: string; status: string }) => {
-            if (ids.includes(r.team_a_id)) {
-              statusMap.set(r.team_a_id, r.status === "active" ? "matched" : "applied");
-            }
-          });
-          setRoomStatuses(statusMap);
+        const queries: Promise<unknown>[] = [
+          supabase.from("chat_rooms").select("id, team_b_id, status").eq("team_a_id", user.id),
+          supabase.from("chat_rooms").select("id, team_a_id, status").eq("team_b_id", user.id),
+          supabase.from("availability_slots").select("slot_key").eq("user_id", user.id).eq("state", "free"),
+        ];
+        if (ids.length > 0) {
+          queries.push(supabase.from("availability_slots").select("user_id, slot_key").in("user_id", ids).eq("state", "free"));
         }
+
+        const [roomsABRes, roomsBARes, mySlotsRes, otherSlotsRes] = await Promise.all(queries) as [
+          { data: { team_b_id: string; status: string }[] | null },
+          { data: { team_a_id: string; status: string }[] | null },
+          { data: { slot_key: string }[] | null },
+          { data: { user_id: string; slot_key: string }[] | null } | undefined,
+        ];
+
+        // Room statuses
+        const statusMap = new Map<string, RoomStatus>();
+        (roomsABRes.data ?? []).forEach((r) => {
+          if (ids.includes(r.team_b_id)) statusMap.set(r.team_b_id, r.status === "active" ? "matched" : "applied");
+        });
+        (roomsBARes.data ?? []).forEach((r) => {
+          if (ids.includes(r.team_a_id)) statusMap.set(r.team_a_id, r.status === "active" ? "matched" : "applied");
+        });
+        setRoomStatuses(statusMap);
+
+        // Schedule overlap
+        const myFreeKeys = new Set((mySlotsRes.data ?? []).map((s) => s.slot_key));
+        const overlapResult = new Map<string, boolean>();
+        (otherSlotsRes?.data ?? []).forEach((s) => {
+          if (myFreeKeys.has(s.slot_key)) overlapResult.set(s.user_id, true);
+        });
+        setOverlapMap(overlapResult);
       }
     } finally {
       setLoading(false);
@@ -118,38 +129,6 @@ export default function ExplorePage() {
   }, [user?.id, supabase]);
 
   useEffect(() => { void load(); }, [load]);
-
-  const showToast = (type: "ok" | "err", text: string, navigateTo?: string) => {
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    setToast({ type, text });
-    toastTimer.current = setTimeout(() => {
-      setToast(null);
-      if (navigateTo) router.push(navigateTo);
-    }, 2000);
-  };
-
-  const handleApply = async (target: Profile) => {
-    if (!user?.id || applying.has(target.user_id)) return;
-    setApplying((s) => new Set([...s, target.user_id]));
-    try {
-      const { error } = await supabase.from("chat_rooms").insert({
-        team_a_id: user.id,
-        team_b_id: target.user_id,
-        team_a_name: user.name || "チームA",
-        team_b_name: target.university_name || "チームB",
-        status: "pending",
-        requested_by: user.id,
-      });
-      if (!error) {
-        setRoomStatuses((m) => new Map(m).set(target.user_id, "applied"));
-        showToast("ok", "申請を送りました。相手の承認をお待ちください");
-      } else {
-        showToast("err", `申請に失敗しました: ${error.message}`);
-      }
-    } finally {
-      setApplying((s) => { const ns = new Set(s); ns.delete(target.user_id); return ns; });
-    }
-  };
 
   // Derived filter data
   const regions = useMemo(() => [...new Set(profiles.map((p) => p.region).filter(Boolean))], [profiles]);
@@ -245,9 +224,14 @@ export default function ExplorePage() {
               <div className="explore-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}>
                 {filtered.map((p) => {
                   const status = roomStatuses.get(p.user_id);
-                  const isApplying = applying.has(p.user_id);
+                  const hasOverlap = overlapMap.get(p.user_id) ?? false;
                   return (
-                    <div key={p.user_id} className="app-card" style={{ background: C.card, border: `1px solid ${C.cardBorder}`, borderRadius: 16, padding: 18 }}>
+                    <Link
+                      key={p.user_id}
+                      href={`/profile/${p.user_id}`}
+                      className="app-card"
+                      style={{ background: C.card, border: `1px solid ${C.cardBorder}`, borderRadius: 16, padding: 18, textDecoration: "none", color: "inherit", display: "block", cursor: "pointer" }}
+                    >
                       <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                         <div style={{ width: 48, height: 48, borderRadius: 13, background: teamHue(p.user_id), display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Archivo', sans-serif", fontWeight: 900, fontSize: 14, color: "#fff", flexShrink: 0, letterSpacing: -0.5 }}>
                           {teamInitials(p.university_name)}
@@ -269,28 +253,27 @@ export default function ExplorePage() {
                         )}
                       </div>
 
+                      {hasOverlap && (
+                        <div style={{ marginTop: 10, fontSize: 11, fontWeight: 700, color: C.green, background: "rgba(37,208,125,0.1)", border: "1px solid rgba(37,208,125,0.3)", borderRadius: 8, padding: "6px 10px" }}>
+                          ★ 日程が合います
+                        </div>
+                      )}
+
                       {p.notes && (
-                        <div style={{ marginTop: 10, fontSize: 12, color: C.muted, background: C.deep, borderRadius: 8, padding: "8px 10px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        <div style={{ marginTop: 8, fontSize: 12, color: C.muted, background: C.deep, borderRadius: 8, padding: "8px 10px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           {p.notes}
                         </div>
                       )}
 
-                      <button
-                        onClick={() => { void handleApply(p); }}
-                        disabled={!!status || isApplying}
-                        style={{
-                          display: "block", width: "100%", marginTop: 14,
-                          background: status === "matched" ? C.green : status === "applied" ? "#2A3448" : C.accent,
-                          color: "#fff", textAlign: "center", padding: 12,
-                          borderRadius: 11, fontWeight: 800, fontSize: 13.5,
-                          border: status === "applied" ? `1px solid ${C.border2}` : "none",
-                          cursor: status || isApplying ? "default" : "pointer",
-                          opacity: isApplying ? 0.6 : 1,
-                        }}
-                      >
-                        {isApplying ? "申請中…" : status === "matched" ? "✓ マッチ成立" : status === "applied" ? "申請済み" : "マッチ申請"}
-                      </button>
-                    </div>
+                      <div style={{ marginTop: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontSize: 12, color: status === "matched" ? C.green : status === "applied" ? C.muted : C.muted }}>
+                          {status === "matched" ? "✓ マッチ成立" : status === "applied" ? "申請済み" : ""}
+                        </span>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: C.accent }}>
+                          詳細を見る ›
+                        </span>
+                      </div>
+                    </Link>
                   );
                 })}
               </div>
@@ -298,17 +281,6 @@ export default function ExplorePage() {
           </div>
         </main>
       </div>
-      {toast && (
-        <div style={{
-          position: "fixed", bottom: 88, left: "50%", transform: "translateX(-50%)",
-          background: toast.type === "ok" ? "rgba(37,208,125,0.97)" : "rgba(255,92,108,0.97)",
-          color: "#fff", padding: "12px 28px", borderRadius: 14, fontSize: 14, fontWeight: 800,
-          zIndex: 200, boxShadow: "0 4px 24px rgba(0,0,0,0.5)", pointerEvents: "none",
-          whiteSpace: "nowrap", letterSpacing: 0.3,
-        }}>
-          {toast.type === "ok" ? "🎉 " : "✕ "}{toast.text}
-        </div>
-      )}
       <MobileBottomNav />
     </div>
   );

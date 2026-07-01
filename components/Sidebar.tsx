@@ -23,11 +23,12 @@ const S = {
 type Notif = { id: number; text: string; time: string; read: boolean };
 
 const LINKS = [
-  { label: "探す",       href: "/explore" },
-  { label: "空き日程",   href: "/availability" },
-  { label: "マッチング", href: "/matches" },
-  { label: "チャット",   href: "/chat" },
-  { label: "通知",       href: "/notifications" },
+  { label: "探す",         href: "/explore" },
+  { label: "空き日程",     href: "/availability" },
+  { label: "マッチング",   href: "/matches" },
+  { label: "チャット",     href: "/chat" },
+  { label: "通知",         href: "/notifications" },
+  { label: "プロフィール", href: "/profile" },
 ];
 
 export default function Sidebar({ active }: { active: string }) {
