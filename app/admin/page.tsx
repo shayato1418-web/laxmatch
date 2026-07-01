@@ -38,10 +38,12 @@ interface AdminUser {
   password: string;
   role: UserRole;
   area: string;
+  level: string;
   registeredAt: string;
   lastLogin: string;
   status: UserStatus;
   flagged: boolean;
+  is_public: boolean;
 }
 
 interface Match {
@@ -59,6 +61,7 @@ interface ChatRoom {
   id: string;
   teamA: string;
   teamB: string;
+  status: string;
   lastMsg: string;
   lastMsgTime: string;
   msgCount: number;
@@ -99,8 +102,8 @@ function matchStatusColor(s: MatchStatus) {
   return s === "confirmed" ? C.green : s === "negotiating" ? C.accent : C.red;
 }
 function exportCSV(users: AdminUser[]) {
-  const hdr = ["名前", "メール", "種別", "地域", "登録日", "ステータス"];
-  const rows = users.map((u) => [u.name, u.email, u.role, u.area, u.registeredAt, u.status]);
+  const hdr = ["大学名", "地域", "レベル", "登録日", "公開状態", "停止状態"];
+  const rows = users.map((u) => [u.name, u.area, u.level, u.registeredAt, u.is_public ? "公開" : "非公開", u.status === "suspended" ? "停止中" : "有効"]);
   const csv = [hdr, ...rows].map((r) => r.join(",")).join("\n");
   const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
@@ -238,35 +241,42 @@ function TabBar({ tabs, active, setActive }: { tabs: { value: string; label: str
 // ─── Section ①: Dashboard ────────────────────────────────────────────────────
 type DbStats = { userCount: number; activeMatchCount: number; weekRequestCount: number };
 
-function Dashboard({ users, matches, dbStats }: { users: AdminUser[]; matches: Match[]; dbStats?: DbStats }) {
-  const confirmed = dbStats?.activeMatchCount ?? matches.filter((m) => m.status === "confirmed").length;
+function Dashboard({ users, chatRooms, dbStats }: { users: AdminUser[]; chatRooms: ChatRoom[]; dbStats?: DbStats }) {
+  const confirmed = dbStats?.activeMatchCount ?? 0;
   const thisWeek = dbStats?.weekRequestCount ?? 0;
-  const totalUsers = dbStats?.userCount ?? users.filter((u) => u.role !== "manager").length;
+  const totalUsers = dbStats?.userCount ?? users.length;
   return (
     <div>
       <SectionHeader title="ダッシュボード" sub="サービス全体の状況を確認できます" />
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 28 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 28 }}>
         <StatCard label="登録チーム数"     value={totalUsers}  sub="全チーム・個人" color={C.accent} />
         <StatCard label="マッチング成立数" value={confirmed}   sub="全期間"         color={C.green}  />
         <StatCard label="今週の申請件数"   value={thisWeek}    sub="直近7日間"       color={C.yellow} />
-        <StatCard label="累計利用者数"     value={dbStats?.userCount ?? users.length} sub="全ロール" color={C.dim} />
       </div>
 
       <div style={{ background: C.card, border: `1px solid ${C.cardB}`, borderRadius: 14, overflow: "hidden" }}>
         <div style={{ padding: "14px 20px", borderBottom: `1px solid ${C.border}`, fontSize: 14, fontWeight: 800 }}>
-          直近のマッチング
+          直近のマッチング申請
         </div>
-        <Table headers={["チームA", "チームB", "日程", "会場", "ステータス"]} minWidth={560}>
-          {matches.slice(0, 5).map((m) => (
-            <tr key={m.id} style={{ borderBottom: `1px solid #141B2E` }}>
-              <Td>{m.teamA}</Td>
-              <Td>{m.teamB}</Td>
-              <Td mono>{m.date}</Td>
-              <Td mono>{m.venue}</Td>
-              <td style={{ padding: "11px 16px" }}><Badge label={matchStatusLbl(m.status)} color={matchStatusColor(m.status)} /></td>
-            </tr>
-          ))}
-        </Table>
+        {chatRooms.length === 0 ? (
+          <div style={{ padding: 32, textAlign: "center", color: C.muted, fontSize: 13 }}>データがありません</div>
+        ) : (
+          <Table headers={["チームA", "チームB", "ステータス", "申請日"]} minWidth={500}>
+            {chatRooms.slice(0, 8).map((r) => (
+              <tr key={r.id} style={{ borderBottom: `1px solid #141B2E` }}>
+                <Td>{r.teamA}</Td>
+                <Td>{r.teamB}</Td>
+                <td style={{ padding: "11px 16px" }}>
+                  <Badge
+                    label={r.status === "active" ? "成立" : r.status === "rejected" ? "却下" : "申請中"}
+                    color={r.status === "active" ? C.green : r.status === "rejected" ? C.red : C.yellow}
+                  />
+                </td>
+                <Td mono>{new Date(r.lastMsgTime).toLocaleDateString("ja-JP")}</Td>
+              </tr>
+            ))}
+          </Table>
+        )}
       </div>
     </div>
   );
@@ -274,47 +284,16 @@ function Dashboard({ users, matches, dbStats }: { users: AdminUser[]; matches: M
 
 // ─── Section ②: User Management ──────────────────────────────────────────────
 function UserManagement({ users, setUsers }: { users: AdminUser[]; setUsers: Dispatch<SetStateAction<AdminUser[]>> }) {
-  const { impersonation, impersonate } = useAuth();
   const supabase = useMemo(() => createClient(), []);
   const [search, setSearch] = useState("");
-  const [passwordModalUserId, setPasswordModalUserId] = useState<string | null>(null);
-  const [passwordVisible, setPasswordVisible] = useState(false);
-
-  const openPasswordModal = (id: string) => {
-    setPasswordModalUserId(id);
-    setPasswordVisible(false);
-  };
-  const closePasswordModal = () => setPasswordModalUserId(null);
-  const passwordModalUser = users.find((u) => u.id === passwordModalUserId) ?? null;
 
   const setStatus = async (id: string, status: UserStatus) => {
     setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, status } : u)));
     await supabase.from("profiles").update({ is_suspended: status === "suspended" }).eq("user_id", id);
   };
-  const toggleFlag = (id: string) =>
-    setUsers((prev) => prev.map((u) => u.id === id ? { ...u, flagged: !u.flagged, status: (u.flagged ? "active" : "flagged") as UserStatus } : u));
-  const deleteUser = (id: string) => {
-    if (!window.confirm("このユーザーを削除しますか？")) return;
-    setUsers((prev) => prev.filter((u) => u.id !== id));
-  };
-
-  const handleImpersonate = async (id: string) => {
-    const target = users.find((u) => u.id === id);
-    if (!target) return;
-    if (target.role === "manager") {
-      window.alert("管理人アカウントの代理ログインはできません");
-      return;
-    }
-    try {
-      await impersonate(target.email, target.password);
-      // Navigation handled automatically: onAuthStateChange fires → isAdmin becomes false → useEffect redirects to /
-    } catch (err) {
-      window.alert(err instanceof Error ? err.message : "代理ログインに失敗しました");
-    }
-  };
 
   const filtered = users.filter(
-    (u) => !search || u.name.includes(search) || u.email.includes(search) || u.area.includes(search)
+    (u) => !search || u.name.includes(search) || u.area.includes(search) || u.level.includes(search)
   );
 
   return (
@@ -327,7 +306,7 @@ function UserManagement({ users, setUsers }: { users: AdminUser[]; setUsers: Dis
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="名前・メール・地域で検索"
+              placeholder="大学名・地域・レベルで検索"
               style={{ background: "#121829", border: `1px solid ${C.b2}`, borderRadius: 10, padding: "8px 14px", fontSize: 13, color: C.dim, outline: "none", width: 220 }}
             />
             <button
@@ -340,53 +319,32 @@ function UserManagement({ users, setUsers }: { users: AdminUser[]; setUsers: Dis
         }
       />
       <div style={{ background: C.card, border: `1px solid ${C.cardB}`, borderRadius: 14, overflow: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 980 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
           <thead>
             <tr style={{ background: "#0D1322" }}>
-              {["チーム名", "種別", "地域", "メールアドレス", "パスワード", "登録日", "最終ログイン", "ステータス", "操作"].map((h) => (
+              {["大学名", "地域", "レベル", "登録日", "公開状態", "停止状態", "操作"].map((h) => (
                 <th key={h} style={{ padding: "10px 14px", fontSize: 11, color: C.muted, fontWeight: 700, textAlign: "left", borderBottom: `1px solid ${C.border}`, whiteSpace: "nowrap" }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {filtered.map((u) => (
-              <tr key={u.id} style={{ borderBottom: `1px solid #141B2E`, background: u.flagged ? "rgba(255,188,46,0.04)" : "transparent" }}>
-                <td style={{ padding: "11px 14px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    {u.flagged && <span style={{ fontSize: 12 }}>🚩</span>}
-                    <span style={{ fontSize: 13, fontWeight: 700 }}>{u.name}</span>
-                  </div>
-                </td>
-                <td style={{ padding: "11px 14px" }}>
-                  <Badge label={roleLbl(u.role)} color={u.role === "university" ? C.accent : u.role === "individual" ? C.green : C.muted} />
-                </td>
+              <tr key={u.id} style={{ borderBottom: `1px solid #141B2E` }}>
+                <td style={{ padding: "11px 14px", fontSize: 13, fontWeight: 700 }}>{u.name}</td>
                 <td style={{ padding: "11px 14px", fontSize: 12, color: C.muted }}>{u.area || "—"}</td>
-                <td style={{ padding: "11px 14px", fontSize: 11.5, fontFamily: "'Roboto Mono', monospace", color: C.dim }}>{u.email}</td>
+                <td style={{ padding: "11px 14px", fontSize: 12, color: C.muted }}>{u.level || "—"}</td>
+                <td style={{ padding: "11px 14px", fontSize: 11, fontFamily: "'Roboto Mono', monospace", color: C.muted, whiteSpace: "nowrap" as const }}>{u.registeredAt}</td>
                 <td style={{ padding: "11px 14px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 12, fontFamily: "'Roboto Mono', monospace", color: C.muted, letterSpacing: 1 }}>
-                      {"••••••••"}
-                    </span>
-                    <button onClick={() => openPasswordModal(u.id)} style={{ fontSize: 10, color: C.accent, background: "none", border: "none", cursor: "pointer", padding: "2px 4px", fontWeight: 700 }}>
-                      パスワード表示
-                    </button>
-                  </div>
-                </td>
-                <td style={{ padding: "11px 14px", fontSize: 11, fontFamily: "'Roboto Mono', monospace", color: C.muted, whiteSpace: "nowrap" }}>{u.registeredAt}</td>
-                <td style={{ padding: "11px 14px", fontSize: 11, fontFamily: "'Roboto Mono', monospace", color: C.muted, whiteSpace: "nowrap" }}>{u.lastLogin}</td>
-                <td style={{ padding: "11px 14px" }}>
-                  <Badge label={u.status === "active" ? "有効" : u.status === "suspended" ? "停止中" : "フラグ"} color={statusColor(u.status)} />
+                  <Badge label={u.is_public ? "公開" : "非公開"} color={u.is_public ? C.green : C.muted} />
                 </td>
                 <td style={{ padding: "11px 14px" }}>
-                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                    {u.status !== "suspended"
-                      ? <Btn label="停止" color={C.yellow} onClick={() => setStatus(u.id, "suspended")} small />
-                      : <Btn label="再開" color={C.green}  onClick={() => setStatus(u.id, "active")}    small />
-                    }
-                    <Btn label="代理ログイン" color={C.accent} onClick={() => handleImpersonate(u.id)} small disabled={impersonation !== null || u.role === "manager"} />
-                    <Btn label={u.flagged ? "🚩解除" : "🚩"} color={C.orange} onClick={() => toggleFlag(u.id)} small />
-                    <Btn label="削除" color={C.red} onClick={() => deleteUser(u.id)} small />
-                  </div>
+                  <Badge label={u.status === "suspended" ? "停止中" : "有効"} color={u.status === "suspended" ? C.red : C.green} />
+                </td>
+                <td style={{ padding: "11px 14px" }}>
+                  {u.status !== "suspended"
+                    ? <Btn label="停止" color={C.yellow} onClick={() => { void setStatus(u.id, "suspended"); }} small />
+                    : <Btn label="再開" color={C.green}  onClick={() => { void setStatus(u.id, "active"); }}    small />
+                  }
                 </td>
               </tr>
             ))}
@@ -759,9 +717,9 @@ function ReportManagement({ reports, setReports }: { reports: Report[]; setRepor
 }
 
 // ─── Section ⑦: Statistics ───────────────────────────────────────────────────
-function Statistics({ users, matches }: { users: AdminUser[]; matches: Match[] }) {
-  const totalMatch = matches.length;
-  const successMatch = matches.filter((m) => m.status === "confirmed").length;
+function Statistics({ users, chatRooms }: { users: AdminUser[]; chatRooms: ChatRoom[] }) {
+  const totalMatch = chatRooms.length;
+  const successMatch = chatRooms.filter((r) => r.status === "active").length;
   const matchRate = totalMatch > 0 ? Math.round((successMatch / totalMatch) * 100) : 0;
 
   // 地域別登録数をリアルデータから集計（"未設定"は除外）
@@ -903,7 +861,7 @@ export default function AdminPage() {
       const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
       const [profilesRes, activeRoomsRes, weekRoomsRes, allRoomsRes] = await Promise.all([
-        supabase.from("profiles").select("user_id, university_name, region, level, gender, is_suspended, is_public"),
+        supabase.from("profiles").select("user_id, university_name, region, level, gender, is_suspended, is_public, created_at"),
         supabase.from("chat_rooms").select("id", { count: "exact", head: true }).eq("status", "active"),
         supabase.from("chat_rooms").select("id", { count: "exact", head: true }).gte("created_at", weekAgo),
         supabase.from("chat_rooms").select("id, team_a_name, team_b_name, status, created_at").order("created_at", { ascending: false }),
@@ -911,17 +869,19 @@ export default function AdminPage() {
 
       const profiles = profilesRes.data ?? [];
       setUsers(
-        profiles.map((p: { user_id: string; university_name: string; region: string; level: string; gender: string; is_suspended: boolean | null; is_public: boolean }) => ({
+        profiles.map((p: { user_id: string; university_name: string; region: string; level: string; gender: string; is_suspended: boolean | null; is_public: boolean; created_at: string }) => ({
           id: p.user_id,
           name: p.university_name || "—",
           email: "—",
           password: "—",
           role: "university" as UserRole,
           area: p.region || "—",
-          registeredAt: "—",
+          level: p.level || "—",
+          registeredAt: p.created_at ? new Date(p.created_at).toLocaleDateString("ja-JP") : "—",
           lastLogin: "—",
           status: p.is_suspended ? "suspended" as UserStatus : "active" as UserStatus,
           flagged: false,
+          is_public: p.is_public ?? false,
         }))
       );
 
@@ -937,6 +897,7 @@ export default function AdminPage() {
           id: r.id,
           teamA: r.team_a_name,
           teamB: r.team_b_name,
+          status: r.status,
           lastMsg: "",
           lastMsgTime: r.created_at,
           msgCount: 0,
@@ -1025,13 +986,13 @@ export default function AdminPage() {
 
         {/* Main content */}
         <main style={{ flex: 1, overflowY: "auto", padding: "28px 32px" }}>
-          {section === "dashboard"     && <Dashboard users={users} matches={matches} dbStats={dbStats} />}
+          {section === "dashboard"     && <Dashboard users={users} chatRooms={chatRooms} dbStats={dbStats} />}
           {section === "users"         && <UserManagement users={users} setUsers={setUsers} />}
           {section === "matches"       && <MatchManagement matches={matches} setMatches={setMatches} />}
           {section === "chats"         && <ChatMonitor rooms={chatRooms} setRooms={setChatRooms} />}
           {section === "notifications" && <NotificationSender users={users} notifs={notifications} setNotifs={setNotifications} />}
           {section === "reports"       && <ReportManagement reports={reports} setReports={setReports} />}
-          {section === "stats"         && <Statistics users={users} matches={matches} />}
+          {section === "stats"         && <Statistics users={users} chatRooms={chatRooms} />}
         </main>
       </div>
     </div>
