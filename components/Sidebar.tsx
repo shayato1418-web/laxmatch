@@ -165,7 +165,7 @@ export default function Sidebar({ active }: { active: string }) {
         <nav style={{ marginTop: 26, display: "flex", flexDirection: "column", gap: 4 }}>
           {LINKS.map((item) => {
             const isActive = active === item.href;
-            const totalBadge = item.href === "/notifications" ? pendingCount + notifUnread : 0;
+            const totalBadge = item.href === "/notifications" ? notifUnread : 0;
             const badge = totalBadge > 0 ? totalBadge : null;
             return (
               <Link key={item.label} href={item.href} style={{

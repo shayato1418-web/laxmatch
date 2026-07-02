@@ -252,9 +252,9 @@ function Dashboard({ users, chatRooms, dbStats }: { users: AdminUser[]; chatRoom
     <div>
       <SectionHeader title="ダッシュボード" sub="サービス全体の状況を確認できます" />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 28 }}>
-        <StatCard label="登録チーム数"     value={totalUsers}  sub="全チーム・個人" color={C.accent} />
-        <StatCard label="マッチング成立数" value={confirmed}   sub="全期間"         color={C.green}  />
-        <StatCard label="今週の申請件数"   value={thisWeek}    sub="直近7日間"       color={C.yellow} />
+        <StatCard label="登録ユーザー数" value={totalUsers} sub="全ユーザー" color={C.accent} />
+        <StatCard label="マッチング成立数" value={confirmed} sub="全期間" color={C.green} />
+        <StatCard label="今週の申請件数" value={thisWeek} sub="直近7日間" color={C.yellow} />
       </div>
 
       <div style={{ background: C.card, border: `1px solid ${C.cardB}`, borderRadius: 14, overflow: "hidden" }}>
@@ -298,27 +298,38 @@ function UserManagement({ users, setUsers }: { users: AdminUser[]; setUsers: Dis
     try {
       await impersonate(id);
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : '代理ログインに失敗しました');
+      window.alert(err instanceof Error ? err.message : "代理ログインに失敗しました");
     } finally {
       setImpersonating(null);
     }
   };
 
-  const [revealedPw, setRevealedPw] = useState<Set<string>>(new Set());
-
   const setStatus = async (id: string, status: UserStatus) => {
+    const previousStatus = users.find((u) => u.id === id)?.status ?? "active";
     setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, status } : u)));
-    await supabase.from("profiles").update({ is_suspended: status === "suspended" }).eq("user_id", id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = session?.access_token ?? "";
+      const res = await fetch("/api/admin/profiles", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ user_id: id, is_suspended: status === "suspended" }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? "状態の更新に失敗しました");
+      }
+    } catch (err) {
+      setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, status: previousStatus } : u)));
+      window.alert(err instanceof Error ? err.message : "状態の更新に失敗しました");
+    }
   };
-
-  const togglePw = (id: string) =>
-    setRevealedPw((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
 
   const filtered = users.filter(
     (u) => !search || u.name.includes(search) || u.email.includes(search) || u.area.includes(search) || u.level.includes(search)
   );
 
-  const HEADERS = ["大学名", "メール", "地域", "レベル", "男女", "LINE ID", "備考", "登録日", "パスワード", "公開", "状態", "操作"];
+  const HEADERS = ["大学名", "メール", "地域", "レベル", "男女", "LINE ID", "備考", "登録日", "公開", "状態", "操作"];
 
   return (
     <div>
@@ -343,7 +354,7 @@ function UserManagement({ users, setUsers }: { users: AdminUser[]; setUsers: Dis
         }
       />
       <div style={{ background: C.card, border: `1px solid ${C.cardB}`, borderRadius: 14, overflow: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1200 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1100 }}>
           <thead>
             <tr style={{ background: "#0D1322" }}>
               {HEADERS.map((h) => (
@@ -363,18 +374,6 @@ function UserManagement({ users, setUsers }: { users: AdminUser[]; setUsers: Dis
                 <td style={{ padding: "10px 12px", fontSize: 12, color: C.muted, maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>{u.notes}</td>
                 <td style={{ padding: "10px 12px", fontSize: 11, fontFamily: "'Roboto Mono', monospace", color: C.muted, whiteSpace: "nowrap" as const }}>{u.registeredAt}</td>
                 <td style={{ padding: "10px 12px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 11, fontFamily: "'Roboto Mono', monospace", color: C.muted, letterSpacing: 1 }}>
-                      {revealedPw.has(u.id) ? (u.password === "—" ? "—" : u.password) : "••••••••"}
-                    </span>
-                    {u.password !== "—" && (
-                      <button onClick={() => togglePw(u.id)} style={{ fontSize: 10, color: C.accent, background: "none", border: "none", cursor: "pointer", padding: "2px 4px", fontWeight: 700 }}>
-                        {revealedPw.has(u.id) ? "隠す" : "表示"}
-                      </button>
-                    )}
-                  </div>
-                </td>
-                <td style={{ padding: "10px 12px" }}>
                   <Badge label={u.is_public ? "公開" : "非公開"} color={u.is_public ? C.green : C.muted} />
                 </td>
                 <td style={{ padding: "10px 12px" }}>
@@ -384,7 +383,7 @@ function UserManagement({ users, setUsers }: { users: AdminUser[]; setUsers: Dis
                   <div style={{ display: "flex", gap: 4, flexWrap: "nowrap" as const }}>
                     {u.status !== "suspended"
                       ? <Btn label="停止" color={C.yellow} onClick={() => { void setStatus(u.id, "suspended"); }} small />
-                      : <Btn label="再開" color={C.green}  onClick={() => { void setStatus(u.id, "active"); }}    small />
+                      : <Btn label="再開" color={C.green} onClick={() => { void setStatus(u.id, "active"); }} small />
                     }
                     <Btn
                       label={impersonating === u.id ? "…" : "代理"}
@@ -609,11 +608,15 @@ function NotificationSender({ users, notifs, setNotifs }: {
 
     let sendError: string | null = null;
     if (rows.length > 0) {
-      const { data: { session } } = await supabase.auth.getSession(); // supabase used only for session token
+      const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch("/api/admin/notifications", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` },
-        body: JSON.stringify({ rows }),
+        body: JSON.stringify({
+          target: target === "all" ? "all" : "user_id",
+          user_id: target === "all" ? undefined : target,
+          message: t,
+        }),
       });
       if (!res.ok) {
         const body = await res.json() as { error?: string };
@@ -919,33 +922,39 @@ export default function AdminPage() {
   useEffect(() => {
     if (!isAdmin) return;
     const loadDb = async () => {
-      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
       const { data: { session } } = await supabase.auth.getSession();
       const accessToken = session?.access_token ?? "";
 
-      const [profilesRes, activeRoomsRes, weekRoomsRes, allRoomsRes, adminUsersRes] = await Promise.all([
-        supabase.from("profiles").select("user_id, university_name, region, level, gender, line_id, notes, is_suspended, is_public, created_at"),
-        supabase.from("chat_rooms").select("id", { count: "exact", head: true }).eq("status", "active"),
-        supabase.from("chat_rooms").select("id", { count: "exact", head: true }).gte("created_at", weekAgo),
-        supabase.from("chat_rooms").select("id, team_a_name, team_b_name, status, created_at").order("created_at", { ascending: false }),
+      type ProfileRow = { user_id: string; university_name: string; region: string; level: string; gender: string; line_id: string; notes: string; is_suspended?: boolean | null; is_public: boolean | null; created_at: string };
+      type RoomRow = { id: string; team_a_name: string; team_b_name: string; status: string; created_at: string };
+      type AuthUser = { id: string; email: string; created_at: string; metadata: Record<string, unknown> };
+
+      const [profilesRes, roomsRes, adminUsersRes] = await Promise.all([
+        fetch("/api/admin/profiles", { headers: { Authorization: `Bearer ${accessToken}` } })
+          .then((r) => r.ok ? r.json() as Promise<{ profiles: ProfileRow[] }> : Promise.resolve({ profiles: [] as ProfileRow[] }))
+          .catch(() => ({ profiles: [] as ProfileRow[] })),
+        fetch("/api/admin/rooms", { headers: { Authorization: `Bearer ${accessToken}` } })
+          .then((r) => r.ok ? r.json() as Promise<{ rooms: RoomRow[] }> : Promise.resolve({ rooms: [] as RoomRow[] }))
+          .catch(() => ({ rooms: [] as RoomRow[] })),
         fetch("/api/admin/users", { headers: { Authorization: `Bearer ${accessToken}` } })
-          .then((r) => r.ok ? r.json() as Promise<{ users: { id: string; email: string; created_at: string; metadata: Record<string, unknown> }[] }> : Promise.resolve({ users: [] }))
-          .catch(() => ({ users: [] })),
+          .then((r) => r.ok ? r.json() as Promise<{ users: AuthUser[] }> : Promise.resolve({ users: [] as AuthUser[] }))
+          .catch(() => ({ users: [] as AuthUser[] })),
       ]);
 
-      type AuthUser = { id: string; email: string; created_at: string; metadata: Record<string, unknown> };
       const authUserMap = new Map<string, AuthUser>((adminUsersRes.users ?? []).map((u: AuthUser) => [u.id, u]));
+      const profiles = (profilesRes.profiles ?? []) as ProfileRow[];
+      const rooms = (roomsRes.rooms ?? []) as RoomRow[];
 
-      const profiles = profilesRes.data ?? [];
       setUsers(
-        profiles.map((p: { user_id: string; university_name: string; region: string; level: string; gender: string; line_id: string; notes: string; is_suspended: boolean | null; is_public: boolean; created_at: string }) => {
+        profiles.map((p) => {
           const au = authUserMap.get(p.user_id);
           return {
             id: p.user_id,
             name: p.university_name || "—",
             email: au?.email ?? "—",
-            password: (au?.metadata?.password as string) ?? "—",
+            password: "—",
             role: "university" as UserRole,
             area: p.region || "—",
             level: p.level || "—",
@@ -963,13 +972,12 @@ export default function AdminPage() {
 
       setDbStats({
         userCount: profiles.length,
-        activeMatchCount: activeRoomsRes.count ?? 0,
-        weekRequestCount: weekRoomsRes.count ?? 0,
+        activeMatchCount: rooms.filter((room) => room.status === "active").length,
+        weekRequestCount: rooms.filter((room) => new Date(room.created_at) >= weekAgo).length,
       });
 
-      const rooms = allRoomsRes.data ?? [];
       setChatRooms(
-        rooms.map((r: { id: string; team_a_name: string; team_b_name: string; status: string; created_at: string }) => ({
+        rooms.map((r) => ({
           id: r.id,
           teamA: r.team_a_name,
           teamB: r.team_b_name,
