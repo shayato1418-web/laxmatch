@@ -35,7 +35,6 @@ interface AdminUser {
   id: string;
   name: string;
   email: string;
-  password: string;
   role: UserRole;
   area: string;
   level: string;
@@ -329,7 +328,7 @@ function UserManagement({ users, setUsers }: { users: AdminUser[]; setUsers: Dis
     (u) => !search || u.name.includes(search) || u.email.includes(search) || u.area.includes(search) || u.level.includes(search)
   );
 
-  const HEADERS = ["大学名", "メール", "地域", "レベル", "男女", "LINE ID", "備考", "登録日", "公開", "状態", "操作"];
+  const HEADERS = ["大学名", "メール", "地域", "レベル", "男女", "備考", "登録日", "公開", "状態", "操作"];
 
   return (
     <div>
@@ -370,7 +369,6 @@ function UserManagement({ users, setUsers }: { users: AdminUser[]; setUsers: Dis
                 <td style={{ padding: "10px 12px", fontSize: 12, color: C.muted }}>{u.area}</td>
                 <td style={{ padding: "10px 12px", fontSize: 12, color: C.muted }}>{u.level}</td>
                 <td style={{ padding: "10px 12px", fontSize: 12, color: C.muted }}>{u.gender}</td>
-                <td style={{ padding: "10px 12px", fontSize: 11, fontFamily: "'Roboto Mono', monospace", color: C.dim }}>{u.lineId}</td>
                 <td style={{ padding: "10px 12px", fontSize: 12, color: C.muted, maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>{u.notes}</td>
                 <td style={{ padding: "10px 12px", fontSize: 11, fontFamily: "'Roboto Mono', monospace", color: C.muted, whiteSpace: "nowrap" as const }}>{u.registeredAt}</td>
                 <td style={{ padding: "10px 12px" }}>
@@ -954,7 +952,6 @@ export default function AdminPage() {
             id: p.user_id,
             name: p.university_name || "—",
             email: au?.email ?? "—",
-            password: "—",
             role: "university" as UserRole,
             area: p.region || "—",
             level: p.level || "—",
