@@ -165,7 +165,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           data: {
             name: userData.name,
             role: userData.role,
-          password: userData.password,
             memberCount: userData.memberCount,
             lineId: userData.lineId,
             notes: userData.notes,
@@ -203,7 +202,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             id: data.user.id,
             email: userData.email,
             name: userData.name,
-            password: userData.password,
             role: userData.role,
             area: userData.area ?? '',
             registeredAt: new Date().toLocaleDateString('ja-JP'),
