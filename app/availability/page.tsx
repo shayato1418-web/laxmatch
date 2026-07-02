@@ -19,11 +19,18 @@ const C = {
   cellBorder: "#1B2238",
   green: "#25D07D",
   red: "#FF5C6C",
+  orange: "#FF9500",
 } as const;
 
-type SlotState = "none" | "free";
+// ─── State types ──────────────────────────────────────────────────────────────
+type SlotState = "none" | "free" | "busy";
 type Toast = { id: number; type: "ok" | "err"; text: string };
 
+function nextState(st: SlotState): SlotState {
+  return st === "none" ? "free" : st === "free" ? "busy" : "none";
+}
+
+// ─── Time / Day config ────────────────────────────────────────────────────────
 // 6:00 〜 22:00 を 1 時間刻み（17スロット）
 const TIME_SLOTS: string[] = [];
 for (let h = 6; h <= 22; h++) TIME_SLOTS.push(`${h}:00`);
@@ -42,30 +49,76 @@ function mkGrid(): SlotState[][] {
   return TIME_SLOTS.map(() => DAYS.map(() => "none" as SlotState));
 }
 
-type Drag = { startSi: number; startDi: number; currentSi: number; targetState: SlotState };
+// ─── Cell style helpers ───────────────────────────────────────────────────────
+type CellStyle = { background: string; border: string; color: string };
 
+function stateStyle(st: SlotState): CellStyle {
+  if (st === "free") return {
+    background: "linear-gradient(135deg, #4D5BFF, #3FC7FF)",
+    border: "1px solid transparent",
+    color: "#fff",
+  };
+  if (st === "busy") return {
+    background: "linear-gradient(135deg, #FF5C6C 0%, #FF9500 100%)",
+    border: "1px solid transparent",
+    color: "#fff",
+  };
+  return {
+    background: "#0E1424",
+    border: `1px solid #1B2238`,
+    color: "transparent",
+  };
+}
+
+function previewStyle(targetState: SlotState): CellStyle {
+  if (targetState === "free") return {
+    background: "rgba(77,91,255,0.5)",
+    border: "2px solid #4D5BFF",
+    color: "#fff",
+  };
+  if (targetState === "busy") return {
+    background: "rgba(255,92,108,0.45)",
+    border: "2px solid #FF5C6C",
+    color: "#fff",
+  };
+  return {
+    background: "rgba(14,20,36,0.85)",
+    border: "2px solid #2A3448",
+    color: "transparent",
+  };
+}
+
+// ─── Drag state type ──────────────────────────────────────────────────────────
+type Drag = {
+  startSi: number;
+  startDi: number;
+  currentSi: number;
+  targetState: SlotState;
+};
+
+// ─── Page component ───────────────────────────────────────────────────────────
 export default function AvailabilityPage() {
   const { user } = useAuth();
   const supabase = useMemo(() => createClient(), []);
 
-  const [grid, setGrid]           = useState<SlotState[][]>(mkGrid);
-  const [drag, setDrag]           = useState<Drag | null>(null);
-  const [saving, setSaving]       = useState(false);
-  const [toast, setToast]         = useState<Toast | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [publishing, setPublishing] = useState(false);
+  const [grid, setGrid]               = useState<SlotState[][]>(mkGrid);
+  const [drag, setDrag]               = useState<Drag | null>(null);
+  const [saving, setSaving]           = useState(false);
+  const [toast, setToast]             = useState<Toast | null>(null);
+  const [loadError, setLoadError]     = useState<string | null>(null);
+  const [publishing, setPublishing]   = useState(false);
   const [isPublished, setIsPublished] = useState(false);
   const [newMatchCount, setNewMatchCount] = useState(0);
 
-  // Refs for stable values used in window-level handlers (avoids stale closures)
+  // Refs for stable reads inside window-level handlers (avoids stale closures)
   const gridRef    = useRef<SlotState[][]>(mkGrid());
   const dragRef    = useRef<Drag | null>(null);
   const userRef    = useRef(user);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => { gridRef.current = grid; },   [grid]);
-  useEffect(() => { dragRef.current = drag; },   [drag]);
-  useEffect(() => { userRef.current = user; },   [user]);
+  useEffect(() => { gridRef.current = grid; }, [grid]);
+  useEffect(() => { dragRef.current = drag; }, [drag]);
+  useEffect(() => { userRef.current = user; }, [user]);
 
   const showToast = useCallback((type: "ok" | "err", text: string) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -73,7 +126,7 @@ export default function AvailabilityPage() {
     toastTimer.current = setTimeout(() => setToast(null), type === "ok" ? 1800 : 3500);
   }, []);
 
-  // ─── Load slots from Supabase ─────────────────────────────────────────────
+  // ─── Load slots from Supabase ───────────────────────────────────────────────
   useEffect(() => {
     if (!user?.id) return;
 
@@ -86,7 +139,7 @@ export default function AvailabilityPage() {
           (data as { slot_key: string; state: string }[]).forEach(({ slot_key, state }) => {
             const [si, di] = slot_key.split("-").map(Number);
             if (!isNaN(si) && !isNaN(di) && si >= 0 && si < TIME_SLOTS.length && di >= 0 && di < DAYS.length) {
-              next[si][di] = state === "free" ? "free" : "none";
+              next[si][di] = state === "free" ? "free" : state === "busy" ? "busy" : "none";
             }
           });
           return next;
@@ -98,17 +151,20 @@ export default function AvailabilityPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  // ─── Window-level pointerup: commit drag ──────────────────────────────────
+  // ─── Window pointerup: commit the drag ─────────────────────────────────────
+  // Uses refs so this handler always sees the latest drag/grid/user state
+  // without needing to re-register on every render.
   useEffect(() => {
-    const finish = () => {
+    const commit = () => {
       const d = dragRef.current;
       if (!d) return;
-      const uid = userRef.current?.id;
-      const prevGrid = gridRef.current.map((r) => [...r]);
-      const minSi = Math.min(d.startSi, d.currentSi);
-      const maxSi = Math.max(d.startSi, d.currentSi);
 
-      // Apply changes to grid immediately
+      const uid     = userRef.current?.id;
+      const prevGrid = gridRef.current.map((r) => [...r]);
+      const minSi   = Math.min(d.startSi, d.currentSi);
+      const maxSi   = Math.max(d.startSi, d.currentSi);
+
+      // Apply to local grid immediately
       setGrid((g) => {
         const next = g.map((r) => [...r]);
         for (let si = minSi; si <= maxSi; si++) next[si][d.startDi] = d.targetState;
@@ -117,10 +173,13 @@ export default function AvailabilityPage() {
       setDrag(null);
 
       if (!uid) return;
+
+      // Build upsert rows for all changed cells
       const rows: { user_id: string; slot_key: string; state: string }[] = [];
       for (let si = minSi; si <= maxSi; si++) {
         rows.push({ user_id: uid, slot_key: `${si}-${d.startDi}`, state: d.targetState });
       }
+
       setSaving(true);
       supabase.from("availability_slots")
         .upsert(rows, { onConflict: "user_id,slot_key" })
@@ -134,17 +193,22 @@ export default function AvailabilityPage() {
           }
         });
     };
-    window.addEventListener("pointerup", finish);
-    return () => window.removeEventListener("pointerup", finish);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // intentionally empty: reads latest values via refs
 
-  // ─── Pointer move on grid: extend currentSi ───────────────────────────────
+    window.addEventListener("pointerup", commit);
+    return () => window.removeEventListener("pointerup", commit);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentionally empty — reads latest via refs
+
+  // ─── Pointer move: extend drag range ───────────────────────────────────────
+  // Placed on the grid container so it fires even when touch-action:none
+  // redirects implicit capture to a cell button (events still bubble up).
   const handleGridPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     const d = dragRef.current;
     if (!d) return;
-    // Find the cell element under the pointer
-    const el = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-si]") as HTMLElement | null;
+    // Use elementFromPoint so we correctly identify the cell under the pointer
+    // even when pointer events are implicitly captured by the original cell.
+    const el = document.elementFromPoint(e.clientX, e.clientY)
+      ?.closest("[data-si]") as HTMLElement | null;
     if (!el) return;
     const si = parseInt(el.dataset.si ?? "");
     const di = parseInt(el.dataset.di ?? "");
@@ -153,7 +217,7 @@ export default function AvailabilityPage() {
     }
   };
 
-  // ─── Preview keys ─────────────────────────────────────────────────────────
+  // ─── Preview key set ────────────────────────────────────────────────────────
   const previewKeys = useMemo(() => {
     if (!drag) return new Set<string>();
     const keys = new Set<string>();
@@ -163,7 +227,7 @@ export default function AvailabilityPage() {
     return keys;
   }, [drag]);
 
-  // ─── Publish + auto-match ─────────────────────────────────────────────────
+  // ─── Publish + auto-match ───────────────────────────────────────────────────
   const handlePublish = async () => {
     if (!user?.id || publishing) return;
     setPublishing(true);
@@ -236,6 +300,7 @@ export default function AvailabilityPage() {
     }
   };
 
+  // ─── Render ─────────────────────────────────────────────────────────────────
   return (
     <div style={{ height: "100vh", display: "flex", background: C.bg, overflow: "hidden" }}>
       <div className="app-body" style={{ display: "flex", flex: 1, overflow: "hidden" }}>
@@ -243,15 +308,22 @@ export default function AvailabilityPage() {
 
         <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
-          {/* Header */}
-          <div className="avail-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 24px", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+          {/* ── Header ─────────────────────────────────────────────────────── */}
+          <div className="avail-header" style={{
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+            padding: "18px 24px", borderBottom: `1px solid ${C.border}`, flexShrink: 0,
+          }}>
             <div>
-              <div style={{ fontFamily: "'Roboto Mono', monospace", fontSize: 10, letterSpacing: 2, color: C.accent, fontWeight: 700 }}>AVAILABILITY</div>
+              <div style={{ fontFamily: "'Roboto Mono', monospace", fontSize: 10, letterSpacing: 2, color: C.accent, fontWeight: 700 }}>
+                AVAILABILITY
+              </div>
               <div style={{ fontSize: 20, fontWeight: 900, marginTop: 3 }}>空き日程を登録</div>
             </div>
             <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
               {saving && (
-                <div style={{ fontFamily: "'Roboto Mono', monospace", fontSize: 10, color: C.muted, letterSpacing: 1 }}>保存中…</div>
+                <div style={{ fontFamily: "'Roboto Mono', monospace", fontSize: 10, color: C.muted, letterSpacing: 1 }}>
+                  保存中…
+                </div>
               )}
               <div style={{ display: "flex", alignItems: "center", gap: 14, background: "#121829", border: `1px solid ${C.border2}`, borderRadius: 10, padding: "8px 16px" }}>
                 <span style={{ fontSize: 15, color: C.muted, userSelect: "none" }}>‹</span>
@@ -259,7 +331,7 @@ export default function AvailabilityPage() {
                 <span style={{ fontSize: 15, color: C.muted, userSelect: "none" }}>›</span>
               </div>
               <button
-                className="avail-publish-btn gradient-btn"
+                className="avail-publish-btn"
                 onClick={handlePublish}
                 disabled={publishing}
                 style={{
@@ -276,16 +348,25 @@ export default function AvailabilityPage() {
             </div>
           </div>
 
-          {/* Load error */}
+          {/* ── Error banner ───────────────────────────────────────────────── */}
           {loadError && (
-            <div style={{ padding: "10px 24px", background: "rgba(255,92,108,0.1)", borderBottom: `1px solid rgba(255,92,108,0.2)`, fontSize: 12, color: C.red, flexShrink: 0 }}>
+            <div style={{
+              padding: "10px 24px",
+              background: "rgba(255,92,108,0.1)", borderBottom: `1px solid rgba(255,92,108,0.2)`,
+              fontSize: 12, color: C.red, flexShrink: 0,
+            }}>
               ⚠ {loadError}
             </div>
           )}
 
-          {/* New match banner */}
+          {/* ── New match banner ────────────────────────────────────────────── */}
           {newMatchCount > 0 && (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 24px", background: "rgba(37,208,125,0.12)", borderBottom: "1px solid rgba(37,208,125,0.25)", flexShrink: 0 }}>
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "10px 24px",
+              background: "rgba(37,208,125,0.12)", borderBottom: "1px solid rgba(37,208,125,0.25)",
+              flexShrink: 0,
+            }}>
               <span style={{ fontSize: 13, fontWeight: 700, color: C.green }}>
                 🎉 {newMatchCount}件のマッチングが成立しました！
               </span>
@@ -295,36 +376,41 @@ export default function AvailabilityPage() {
             </div>
           )}
 
-          {/* Legend */}
-          <div style={{ display: "flex", gap: 20, padding: "10px 24px", borderBottom: `1px solid #141B2E`, flexShrink: 0, alignItems: "center", flexWrap: "wrap" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <div style={{ width: 12, height: 12, borderRadius: 3, background: "linear-gradient(135deg, #4D5BFF, #3FC7FF)", flexShrink: 0 }} />
-              <span style={{ fontSize: 12, color: C.muted }}>空き</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <div style={{ width: 12, height: 12, borderRadius: 3, background: "#0E1424", border: `1px solid ${C.cellBorder}`, flexShrink: 0 }} />
-              <span style={{ fontSize: 12, color: C.muted }}>未設定</span>
-            </div>
+          {/* ── Legend ─────────────────────────────────────────────────────── */}
+          <div style={{
+            display: "flex", gap: 16, padding: "10px 24px",
+            borderBottom: `1px solid #141B2E`, flexShrink: 0,
+            alignItems: "center", flexWrap: "wrap",
+          }}>
+            {[
+              { bg: "linear-gradient(135deg, #4D5BFF, #3FC7FF)", label: "◎ 空き" },
+              { bg: "linear-gradient(135deg, #FF5C6C, #FF9500)", label: "✕ 予定あり" },
+              { bg: "#0E1424", label: "− 未設定", border: "1px solid #1B2238" },
+            ].map((l) => (
+              <div key={l.label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ width: 14, height: 14, borderRadius: 3, background: l.bg, border: l.border, flexShrink: 0 }} />
+                <span style={{ fontSize: 12, color: C.muted }}>{l.label}</span>
+              </div>
+            ))}
             <span className="avail-hint" style={{ marginLeft: "auto", fontSize: 11, color: "#5A647F" }}>
-              タップ or 縦ドラッグで空き時間を設定
+              タップで状態切替 / 縦ドラッグで範囲選択
             </span>
           </div>
 
-          {/* Calendar grid */}
+          {/* ── Calendar grid ──────────────────────────────────────────────── */}
           <div
             className="app-scroll"
             style={{ flex: 1, overflowY: "auto", overflowX: "auto", cursor: drag ? "ns-resize" : "auto" }}
             onPointerMove={handleGridPointerMove}
           >
-            <div style={{ minWidth: 480, padding: "0 16px 32px" }}>
+            <div style={{ minWidth: 480, padding: "0 16px 40px" }}>
 
               {/* Sticky day header */}
               <div style={{
                 position: "sticky", top: 0, zIndex: 10,
-                display: "grid", gridTemplateColumns: "48px repeat(7, 1fr)", gap: 3,
+                display: "grid", gridTemplateColumns: "52px repeat(7, 1fr)", gap: 3,
                 background: C.bg, padding: "12px 0 8px",
-                borderBottom: `1px solid ${C.border}`,
-                marginBottom: 6,
+                borderBottom: `1px solid ${C.border}`, marginBottom: 6,
               }}>
                 <div />
                 {DAYS.map((d) => (
@@ -346,41 +432,29 @@ export default function AvailabilityPage() {
               {TIME_SLOTS.map((label, si) => (
                 <div
                   key={label}
-                  style={{ display: "grid", gridTemplateColumns: "48px repeat(7, 1fr)", gap: 3, marginBottom: 3 }}
+                  style={{ display: "grid", gridTemplateColumns: "52px repeat(7, 1fr)", gap: 3, marginBottom: 3 }}
                 >
-                  {/* Time label */}
+                  {/* Time label (no touch-action:none here — allows vertical scroll) */}
                   <div style={{
                     display: "flex", alignItems: "center", justifyContent: "flex-end",
                     fontFamily: "'Roboto Mono', monospace", fontSize: 11,
                     color: "#9AA4C2", fontWeight: 600, paddingRight: 8,
+                    userSelect: "none",
                   }}>
                     {label}
                   </div>
 
                   {/* Day cells */}
                   {DAYS.map((_, di) => {
-                    const key = `${si}-${di}`;
+                    const key      = `${si}-${di}`;
                     const isPreview = previewKeys.has(key);
-                    const st = grid[si][di];
-                    const toFree = drag?.targetState === "free";
+                    const st        = grid[si][di];
+                    const cs        = isPreview ? previewStyle(drag!.targetState) : stateStyle(st);
 
-                    let bg: string;
-                    let border: string;
-                    let textColor: string;
-
-                    if (isPreview) {
-                      bg     = toFree ? "rgba(77,91,255,0.55)" : "rgba(14,20,36,0.9)";
-                      border = toFree ? "2px solid #4D5BFF"   : "2px solid #2A3448";
-                      textColor = toFree ? "#fff" : "transparent";
-                    } else if (st === "free") {
-                      bg        = "linear-gradient(135deg, #4D5BFF, #3FC7FF)";
-                      border    = "1px solid transparent";
-                      textColor = "#fff";
-                    } else {
-                      bg        = "#0E1424";
-                      border    = `1px solid ${C.cellBorder}`;
-                      textColor = "transparent";
-                    }
+                    const label =
+                      isPreview
+                        ? (drag!.targetState === "free" ? "空き" : drag!.targetState === "busy" ? "予定" : "")
+                        : st === "free" ? "空き" : st === "busy" ? "予定" : "";
 
                     return (
                       <button
@@ -389,26 +463,26 @@ export default function AvailabilityPage() {
                         data-si={si}
                         data-di={di}
                         onPointerDown={(e) => {
-                          e.preventDefault();
-                          const targetState: SlotState = st === "free" ? "none" : "free";
-                          setDrag({ startSi: si, startDi: di, currentSi: si, targetState });
+                          e.preventDefault(); // prevents click / text-select
+                          const target = nextState(st);
+                          setDrag({ startSi: si, startDi: di, currentSi: si, targetState: target });
                         }}
                         style={{
                           height: 52,
                           borderRadius: 7,
-                          background: bg,
-                          border,
-                          color: textColor,
+                          background: cs.background,
+                          border: cs.border,
+                          color: cs.color,
                           cursor: "inherit",
                           display: "flex", alignItems: "center", justifyContent: "center",
                           fontSize: 11, fontWeight: 700,
-                          touchAction: "none",
+                          touchAction: "none",          // prevents browser scroll during drag
                           userSelect: "none",
                           WebkitTapHighlightColor: "transparent",
                           transition: isPreview ? "none" : "background 0.1s, border 0.1s",
                         }}
                       >
-                        {st === "free" && !isPreview ? "空き" : ""}
+                        {label}
                       </button>
                     );
                   })}
@@ -419,7 +493,7 @@ export default function AvailabilityPage() {
         </main>
       </div>
 
-      {/* Toast */}
+      {/* ── Toast ─────────────────────────────────────────────────────────────── */}
       {toast && (
         <div style={{
           position: "fixed", bottom: 88, left: "50%", transform: "translateX(-50%)",
