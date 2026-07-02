@@ -21,15 +21,12 @@ const C = {
   red: "#FF5C6C",
 } as const;
 
-type SlotState = "none" | "free" | "busy";
+type SlotState = "none" | "free";
 type Toast = { id: number; type: "ok" | "err"; text: string };
 
-// 6:00 〜 21:30 を 30 分刻みで生成
+// 6:00 〜 22:00 を 1 時間刻み（17スロット）
 const TIME_SLOTS: string[] = [];
-for (let h = 6; h <= 21; h++) {
-  TIME_SLOTS.push(`${h}:00`);
-  TIME_SLOTS.push(`${h}:30`);
-}
+for (let h = 6; h <= 22; h++) TIME_SLOTS.push(`${h}:00`);
 
 const DAYS = [
   { w: "月", n: 23 },
@@ -45,30 +42,30 @@ function mkGrid(): SlotState[][] {
   return TIME_SLOTS.map(() => DAYS.map(() => "none" as SlotState));
 }
 
-function cellBg(st: SlotState): React.CSSProperties {
-  if (st === "free") return { background: "linear-gradient(135deg, #4D5BFF, #3FC7FF)", color: "#fff" };
-  if (st === "busy") return {
-    background: "repeating-linear-gradient(45deg,#1A2238,#1A2238 3px,#141A2C 3px,#141A2C 6px)",
-    color: "#6A748F",
-  };
-  return { background: "#0E1424", color: "transparent" };
-}
+type Drag = { startSi: number; startDi: number; currentSi: number; targetState: SlotState };
 
 export default function AvailabilityPage() {
   const { user } = useAuth();
   const supabase = useMemo(() => createClient(), []);
 
-  const [grid, setGrid] = useState<SlotState[][]>(mkGrid);
-  const [flash, setFlash] = useState<`${number}-${number}` | null>(null);
-  const [savingCells, setSavingCells] = useState<Set<string>>(new Set());
-  const [toast, setToast] = useState<Toast | null>(null);
+  const [grid, setGrid]           = useState<SlotState[][]>(mkGrid);
+  const [drag, setDrag]           = useState<Drag | null>(null);
+  const [saving, setSaving]       = useState(false);
+  const [toast, setToast]         = useState<Toast | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [isPublished, setIsPublished] = useState(false);
   const [newMatchCount, setNewMatchCount] = useState(0);
 
-  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Refs for stable values used in window-level handlers (avoids stale closures)
+  const gridRef    = useRef<SlotState[][]>(mkGrid());
+  const dragRef    = useRef<Drag | null>(null);
+  const userRef    = useRef(user);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => { gridRef.current = grid; },   [grid]);
+  useEffect(() => { dragRef.current = drag; },   [drag]);
+  useEffect(() => { userRef.current = user; },   [user]);
 
   const showToast = useCallback((type: "ok" | "err", text: string) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -76,178 +73,145 @@ export default function AvailabilityPage() {
     toastTimer.current = setTimeout(() => setToast(null), type === "ok" ? 1800 : 3500);
   }, []);
 
-  // Load slots + current publish state from Supabase
+  // ─── Load slots from Supabase ─────────────────────────────────────────────
   useEffect(() => {
     if (!user?.id) return;
-    console.log("[availability] loading for user:", user.id);
 
-    // Load availability slots
-    supabase
-      .from("availability_slots")
-      .select("slot_key, state")
-      .eq("user_id", user.id)
+    supabase.from("availability_slots").select("slot_key, state").eq("user_id", user.id)
       .then(({ data, error }) => {
-        if (error) {
-          console.error("[availability] load error:", error.code, error.message);
-          setLoadError(`読み込みエラー: ${error.message}`);
-          return;
-        }
-        if (!data || data.length === 0) return;
-        console.log("[availability] loaded", data.length, "slots");
+        if (error) { setLoadError(`読み込みエラー: ${error.message}`); return; }
+        if (!data?.length) return;
         setGrid((g) => {
           const next = g.map((r) => [...r]);
-          (data as { slot_key: string; state: SlotState }[]).forEach(({ slot_key, state }) => {
+          (data as { slot_key: string; state: string }[]).forEach(({ slot_key, state }) => {
             const [si, di] = slot_key.split("-").map(Number);
             if (!isNaN(si) && !isNaN(di) && si >= 0 && si < TIME_SLOTS.length && di >= 0 && di < DAYS.length) {
-              next[si][di] = state;
+              next[si][di] = state === "free" ? "free" : "none";
             }
           });
           return next;
         });
       });
 
-    // Load current publish state
-    supabase
-      .from("profiles")
-      .select("is_public")
-      .eq("user_id", user.id)
-      .single()
-      .then(({ data }) => {
-        if (data?.is_public) setIsPublished(true);
-      });
+    supabase.from("profiles").select("is_public").eq("user_id", user.id).single()
+      .then(({ data }) => { if (data?.is_public) setIsPublished(true); });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  // Toggle cell state with Supabase persistence
-  const toggle = async (si: number, di: number) => {
-    const key = `${si}-${di}`;
-    console.log("[availability] toggle", { si, di, current: grid[si][di], userId: user?.id });
+  // ─── Window-level pointerup: commit drag ──────────────────────────────────
+  useEffect(() => {
+    const finish = () => {
+      const d = dragRef.current;
+      if (!d) return;
+      const uid = userRef.current?.id;
+      const prevGrid = gridRef.current.map((r) => [...r]);
+      const minSi = Math.min(d.startSi, d.currentSi);
+      const maxSi = Math.max(d.startSi, d.currentSi);
 
-    const prevState = grid[si][di];
-    const newState: SlotState = prevState === "none" ? "free" : prevState === "free" ? "busy" : "none";
-
-    setGrid((g) => {
-      const next = g.map((r) => [...r]);
-      next[si][di] = newState;
-      return next;
-    });
-
-    setFlash(key as `${number}-${number}`);
-    if (flashTimer.current) clearTimeout(flashTimer.current);
-    flashTimer.current = setTimeout(() => setFlash(null), 400);
-
-    if (!user?.id) {
-      showToast("err", "ログインが必要です");
-      return;
-    }
-
-    setSavingCells((s) => new Set([...s, key]));
-
-    const { error } = await supabase
-      .from("availability_slots")
-      .upsert(
-        { user_id: user.id, slot_key: key, state: newState },
-        { onConflict: "user_id,slot_key" }
-      );
-
-    setSavingCells((s) => { const ns = new Set(s); ns.delete(key); return ns; });
-
-    if (error) {
-      console.error("[availability] save error:", error.code, error.message, error.details, error.hint);
-      showToast("err", `保存に失敗しました (${error.code ?? error.message})`);
+      // Apply changes to grid immediately
       setGrid((g) => {
         const next = g.map((r) => [...r]);
-        next[si][di] = prevState;
+        for (let si = minSi; si <= maxSi; si++) next[si][d.startDi] = d.targetState;
         return next;
       });
-    } else {
-      console.log("[availability] saved:", key, "→", newState);
-      showToast("ok", "保存しました");
+      setDrag(null);
+
+      if (!uid) return;
+      const rows: { user_id: string; slot_key: string; state: string }[] = [];
+      for (let si = minSi; si <= maxSi; si++) {
+        rows.push({ user_id: uid, slot_key: `${si}-${d.startDi}`, state: d.targetState });
+      }
+      setSaving(true);
+      supabase.from("availability_slots")
+        .upsert(rows, { onConflict: "user_id,slot_key" })
+        .then(({ error }) => {
+          setSaving(false);
+          if (error) {
+            showToast("err", `保存に失敗しました (${error.code ?? error.message})`);
+            setGrid(prevGrid); // revert on error
+          } else {
+            showToast("ok", "保存しました");
+          }
+        });
+    };
+    window.addEventListener("pointerup", finish);
+    return () => window.removeEventListener("pointerup", finish);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentionally empty: reads latest values via refs
+
+  // ─── Pointer move on grid: extend currentSi ───────────────────────────────
+  const handleGridPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = dragRef.current;
+    if (!d) return;
+    // Find the cell element under the pointer
+    const el = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-si]") as HTMLElement | null;
+    if (!el) return;
+    const si = parseInt(el.dataset.si ?? "");
+    const di = parseInt(el.dataset.di ?? "");
+    if (!isNaN(si) && !isNaN(di) && di === d.startDi && si !== d.currentSi) {
+      setDrag((prev) => (prev ? { ...prev, currentSi: si } : prev));
     }
   };
 
-  // Publish: set is_public=true, then auto-match with other public users
+  // ─── Preview keys ─────────────────────────────────────────────────────────
+  const previewKeys = useMemo(() => {
+    if (!drag) return new Set<string>();
+    const keys = new Set<string>();
+    const minSi = Math.min(drag.startSi, drag.currentSi);
+    const maxSi = Math.max(drag.startSi, drag.currentSi);
+    for (let si = minSi; si <= maxSi; si++) keys.add(`${si}-${drag.startDi}`);
+    return keys;
+  }, [drag]);
+
+  // ─── Publish + auto-match ─────────────────────────────────────────────────
   const handlePublish = async () => {
     if (!user?.id || publishing) return;
     setPublishing(true);
-    console.log("[publish] starting for user:", user.id);
 
     try {
-      // 1. Upsert profile with is_public = true
-      const { error: profErr } = await supabase
-        .from("profiles")
-        .upsert(
-          {
-            user_id: user.id,
-            university_name: user.name || "",
-            gender: user.gender || "",
-            region: user.area || "",
-            level: user.level || "",
-            line_id: user.lineId || "",
-            notes: user.notes || "",
-            is_public: true,
-          },
-          { onConflict: "user_id" }
-        );
-
-      if (profErr) {
-        console.error("[publish] profile upsert error:", profErr);
-        showToast("err", `公開に失敗しました: ${profErr.message}`);
-        return;
-      }
-
+      const { error: profErr } = await supabase.from("profiles").upsert(
+        {
+          user_id: user.id,
+          university_name: user.name || "",
+          gender: user.gender || "",
+          region: user.area || "",
+          level: user.level || "",
+          line_id: user.lineId || "",
+          notes: user.notes || "",
+          is_public: true,
+        },
+        { onConflict: "user_id" }
+      );
+      if (profErr) { showToast("err", `公開に失敗しました: ${profErr.message}`); return; }
       setIsPublished(true);
-      console.log("[publish] profile set to public");
 
-      // 2. Get my free slots
       const { data: mySlots } = await supabase
-        .from("availability_slots")
-        .select("slot_key")
-        .eq("user_id", user.id)
-        .eq("state", "free");
-
+        .from("availability_slots").select("slot_key").eq("user_id", user.id).eq("state", "free");
       if (!mySlots || mySlots.length === 0) {
         showToast("ok", "公開しました（空きスロットを登録するとマッチングが開始されます）");
         return;
       }
 
       const mySlotSet = new Set(mySlots.map((s: { slot_key: string }) => s.slot_key));
-      console.log("[publish] my free slots:", mySlotSet.size);
 
-      // 3. Get other public users
       const { data: others } = await supabase
-        .from("profiles")
-        .select("user_id, university_name")
-        .eq("is_public", true)
-        .neq("user_id", user.id);
-
+        .from("profiles").select("user_id, university_name").eq("is_public", true).neq("user_id", user.id);
       if (!others || others.length === 0) {
         showToast("ok", "公開しました（まだマッチング相手がいません）");
         return;
       }
 
-      console.log("[publish] other public users:", others.length);
       let newMatches = 0;
-
       for (const other of others as { user_id: string; university_name: string }[]) {
-        // Check if room already exists in either direction
         const [{ data: roomAB }, { data: roomBA }] = await Promise.all([
           supabase.from("chat_rooms").select("id").eq("team_a_id", user.id).eq("team_b_id", other.user_id).maybeSingle(),
           supabase.from("chat_rooms").select("id").eq("team_a_id", other.user_id).eq("team_b_id", user.id).maybeSingle(),
         ]);
         if (roomAB || roomBA) continue;
 
-        // Check slot overlap
         const { data: theirSlots } = await supabase
-          .from("availability_slots")
-          .select("slot_key")
-          .eq("user_id", other.user_id)
-          .eq("state", "free");
-
-        if (!theirSlots || theirSlots.length === 0) continue;
-
-        const hasOverlap = theirSlots.some((s: { slot_key: string }) => mySlotSet.has(s.slot_key));
-        if (!hasOverlap) continue;
+          .from("availability_slots").select("slot_key").eq("user_id", other.user_id).eq("state", "free");
+        if (!theirSlots?.some((s: { slot_key: string }) => mySlotSet.has(s.slot_key))) continue;
 
         const { error: roomErr } = await supabase.from("chat_rooms").insert({
           team_a_id: user.id,
@@ -256,13 +220,7 @@ export default function AvailabilityPage() {
           team_b_name: other.university_name || "チームB",
           status: "active",
         });
-
-        if (roomErr) {
-          console.error("[publish] room create error:", roomErr);
-        } else {
-          newMatches++;
-          console.log("[publish] matched with:", other.university_name);
-        }
+        if (!roomErr) newMatches++;
       }
 
       if (newMatches > 0) {
@@ -271,8 +229,7 @@ export default function AvailabilityPage() {
       } else {
         showToast("ok", "公開しました（マッチング相手を探しています）");
       }
-    } catch (err) {
-      console.error("[publish] error:", err);
+    } catch {
       showToast("err", "公開処理中にエラーが発生しました");
     } finally {
       setPublishing(false);
@@ -285,6 +242,7 @@ export default function AvailabilityPage() {
         <Sidebar active="/availability" />
 
         <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+
           {/* Header */}
           <div className="avail-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 24px", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
             <div>
@@ -292,15 +250,13 @@ export default function AvailabilityPage() {
               <div style={{ fontSize: 20, fontWeight: 900, marginTop: 3 }}>空き日程を登録</div>
             </div>
             <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              {savingCells.size > 0 && (
-                <div style={{ fontFamily: "'Roboto Mono', monospace", fontSize: 10, color: C.muted, letterSpacing: 1 }}>
-                  保存中…
-                </div>
+              {saving && (
+                <div style={{ fontFamily: "'Roboto Mono', monospace", fontSize: 10, color: C.muted, letterSpacing: 1 }}>保存中…</div>
               )}
               <div style={{ display: "flex", alignItems: "center", gap: 14, background: "#121829", border: `1px solid ${C.border2}`, borderRadius: 10, padding: "8px 16px" }}>
-                <span style={{ fontSize: 15, color: C.muted, cursor: "pointer", userSelect: "none" }}>‹</span>
+                <span style={{ fontSize: 15, color: C.muted, userSelect: "none" }}>‹</span>
                 <span style={{ fontSize: 13, fontWeight: 800 }}>6月23日 — 29日</span>
-                <span style={{ fontSize: 15, color: C.muted, cursor: "pointer", userSelect: "none" }}>›</span>
+                <span style={{ fontSize: 15, color: C.muted, userSelect: "none" }}>›</span>
               </div>
               <button
                 className="avail-publish-btn gradient-btn"
@@ -320,10 +276,10 @@ export default function AvailabilityPage() {
             </div>
           </div>
 
-          {/* Load error banner */}
+          {/* Load error */}
           {loadError && (
             <div style={{ padding: "10px 24px", background: "rgba(255,92,108,0.1)", borderBottom: `1px solid rgba(255,92,108,0.2)`, fontSize: 12, color: C.red, flexShrink: 0 }}>
-              ⚠ {loadError} — セルをタップして手動で設定できます
+              ⚠ {loadError}
             </div>
           )}
 
@@ -340,90 +296,124 @@ export default function AvailabilityPage() {
           )}
 
           {/* Legend */}
-          <div style={{ display: "flex", gap: 20, padding: "10px 24px", borderBottom: `1px solid #141B2E`, flexShrink: 0, alignItems: "center" }}>
-            {[
-              { bg: "linear-gradient(135deg, #4D5BFF, #3FC7FF)", label: "空き" },
-              { bg: "repeating-linear-gradient(45deg,#1A2238,#1A2238 3px,#141A2C 3px,#141A2C 6px)", label: "予定あり" },
-              { bg: "#0E1424", label: "未設定", border: `1px solid ${C.cellBorder}` },
-            ].map((l) => (
-              <div key={l.label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <div style={{ width: 12, height: 12, borderRadius: 3, background: l.bg, border: l.border, flexShrink: 0 }} />
-                <span style={{ fontSize: 12, color: C.muted }}>{l.label}</span>
-              </div>
-            ))}
+          <div style={{ display: "flex", gap: 20, padding: "10px 24px", borderBottom: `1px solid #141B2E`, flexShrink: 0, alignItems: "center", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ width: 12, height: 12, borderRadius: 3, background: "linear-gradient(135deg, #4D5BFF, #3FC7FF)", flexShrink: 0 }} />
+              <span style={{ fontSize: 12, color: C.muted }}>空き</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ width: 12, height: 12, borderRadius: 3, background: "#0E1424", border: `1px solid ${C.cellBorder}`, flexShrink: 0 }} />
+              <span style={{ fontSize: 12, color: C.muted }}>未設定</span>
+            </div>
             <span className="avail-hint" style={{ marginLeft: "auto", fontSize: 11, color: "#5A647F" }}>
-              タップで 未設定 → 空き → 予定あり → 未設定
+              タップ or 縦ドラッグで空き時間を設定
             </span>
           </div>
 
           {/* Calendar grid */}
-          <div className="app-scroll" style={{ flex: 1, overflowY: "auto", overflowX: "auto" }}>
-            <div style={{ minWidth: 560, padding: "0 24px 24px" }}>
+          <div
+            className="app-scroll"
+            style={{ flex: 1, overflowY: "auto", overflowX: "auto", cursor: drag ? "ns-resize" : "auto" }}
+            onPointerMove={handleGridPointerMove}
+          >
+            <div style={{ minWidth: 480, padding: "0 16px 32px" }}>
+
               {/* Sticky day header */}
               <div style={{
                 position: "sticky", top: 0, zIndex: 10,
-                display: "grid", gridTemplateColumns: "52px repeat(7,1fr)", gap: 4,
+                display: "grid", gridTemplateColumns: "48px repeat(7, 1fr)", gap: 3,
                 background: C.bg, padding: "12px 0 8px",
+                borderBottom: `1px solid ${C.border}`,
+                marginBottom: 6,
               }}>
                 <div />
                 {DAYS.map((d) => (
                   <div key={d.n} style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 12, fontWeight: 800, color: d.we === "sat" ? "#5BA8FF" : d.we === "sun" ? "#FF7A8A" : C.dim }}>{d.w}</div>
-                    <div style={{ fontFamily: "'Roboto Mono', monospace", fontSize: 11, color: C.muted, marginTop: 2 }}>{d.n}</div>
+                    <div style={{
+                      fontSize: 13, fontWeight: 800,
+                      color: d.we === "sat" ? "#5BA8FF" : d.we === "sun" ? "#FF7A8A" : C.dim,
+                    }}>
+                      {d.w}
+                    </div>
+                    <div style={{ fontFamily: "'Roboto Mono', monospace", fontSize: 10, color: C.muted, marginTop: 2 }}>
+                      {d.n}
+                    </div>
                   </div>
                 ))}
               </div>
 
-              {/* Rows */}
-              {TIME_SLOTS.map((label, si) => {
-                const isHour = label.endsWith(":00");
-                return (
-                  <div key={label} style={{ display: "grid", gridTemplateColumns: "52px repeat(7,1fr)", gap: 4, marginBottom: 3 }}>
-                    <div style={{
-                      display: "flex", alignItems: "center",
-                      fontFamily: "'Roboto Mono', monospace",
-                      fontSize: 10,
-                      color: isHour ? "#9AA4C2" : "#3A4460",
-                      fontWeight: isHour ? 600 : 400,
-                      paddingRight: 6,
-                      justifyContent: "flex-end",
-                    }}>
-                      {isHour ? label : "·"}
-                    </div>
-
-                    {DAYS.map((_, di) => {
-                      const st = grid[si][di];
-                      const cellKey = `${si}-${di}` as const;
-                      const isFlashing = flash === cellKey;
-                      const isSaving = savingCells.has(`${si}-${di}`);
-                      return (
-                        <button
-                          key={di}
-                          type="button"
-                          onClick={() => { void toggle(si, di); }}
-                          disabled={isSaving}
-                          style={{
-                            height: 44,
-                            borderRadius: 7,
-                            border: isFlashing ? `2px solid #fff` : `1px solid ${C.cellBorder}`,
-                            cursor: isSaving ? "wait" : "pointer",
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: 11, fontWeight: 700,
-                            transition: "border-color 0.15s, transform 0.1s, opacity 0.1s",
-                            transform: isFlashing ? "scale(0.94)" : "scale(1)",
-                            opacity: isSaving ? 0.5 : 1,
-                            WebkitTapHighlightColor: "transparent",
-                            touchAction: "manipulation",
-                            ...cellBg(st),
-                          }}
-                        >
-                          {st === "free" ? "空き" : st === "busy" ? "予定" : ""}
-                        </button>
-                      );
-                    })}
+              {/* Time rows */}
+              {TIME_SLOTS.map((label, si) => (
+                <div
+                  key={label}
+                  style={{ display: "grid", gridTemplateColumns: "48px repeat(7, 1fr)", gap: 3, marginBottom: 3 }}
+                >
+                  {/* Time label */}
+                  <div style={{
+                    display: "flex", alignItems: "center", justifyContent: "flex-end",
+                    fontFamily: "'Roboto Mono', monospace", fontSize: 11,
+                    color: "#9AA4C2", fontWeight: 600, paddingRight: 8,
+                  }}>
+                    {label}
                   </div>
-                );
-              })}
+
+                  {/* Day cells */}
+                  {DAYS.map((_, di) => {
+                    const key = `${si}-${di}`;
+                    const isPreview = previewKeys.has(key);
+                    const st = grid[si][di];
+                    const toFree = drag?.targetState === "free";
+
+                    let bg: string;
+                    let border: string;
+                    let textColor: string;
+
+                    if (isPreview) {
+                      bg     = toFree ? "rgba(77,91,255,0.55)" : "rgba(14,20,36,0.9)";
+                      border = toFree ? "2px solid #4D5BFF"   : "2px solid #2A3448";
+                      textColor = toFree ? "#fff" : "transparent";
+                    } else if (st === "free") {
+                      bg        = "linear-gradient(135deg, #4D5BFF, #3FC7FF)";
+                      border    = "1px solid transparent";
+                      textColor = "#fff";
+                    } else {
+                      bg        = "#0E1424";
+                      border    = `1px solid ${C.cellBorder}`;
+                      textColor = "transparent";
+                    }
+
+                    return (
+                      <button
+                        key={di}
+                        type="button"
+                        data-si={si}
+                        data-di={di}
+                        onPointerDown={(e) => {
+                          e.preventDefault();
+                          const targetState: SlotState = st === "free" ? "none" : "free";
+                          setDrag({ startSi: si, startDi: di, currentSi: si, targetState });
+                        }}
+                        style={{
+                          height: 52,
+                          borderRadius: 7,
+                          background: bg,
+                          border,
+                          color: textColor,
+                          cursor: "inherit",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 11, fontWeight: 700,
+                          touchAction: "none",
+                          userSelect: "none",
+                          WebkitTapHighlightColor: "transparent",
+                          transition: isPreview ? "none" : "background 0.1s, border 0.1s",
+                        }}
+                      >
+                        {st === "free" && !isPreview ? "空き" : ""}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
           </div>
         </main>
