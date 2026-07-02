@@ -39,6 +39,7 @@ export default function Sidebar({ active }: { active: string }) {
   const [dropTop, setDropTop] = useState(200);
   const [notifs, setNotifs] = useState<Notif[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
+  const [notifUnread, setNotifUnread] = useState(0);
   const notifBtnRef = useRef<HTMLButtonElement>(null);
   const dropRef = useRef<HTMLDivElement>(null);
 
@@ -57,27 +58,33 @@ export default function Sidebar({ active }: { active: string }) {
     return () => document.removeEventListener("mousedown", handler);
   }, [notifOpen]);
 
-  // Load pending match-request count
+  // Load pending match-request count + notifications unread count
   useEffect(() => {
     if (!user?.id) return;
     const uid = user.id;
-    supabase
-      .from("chat_rooms")
-      .select("id", { count: "exact", head: true })
-      .eq("team_b_id", uid)
-      .eq("status", "pending")
-      .then(({ count }) => setPendingCount(count ?? 0));
+
+    const loadCounts = () => {
+      supabase
+        .from("chat_rooms")
+        .select("id", { count: "exact", head: true })
+        .eq("team_b_id", uid)
+        .eq("status", "pending")
+        .then(({ count }) => setPendingCount(count ?? 0));
+
+      supabase
+        .from("notifications")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", uid)
+        .eq("is_read", false)
+        .then(({ count }) => setNotifUnread(count ?? 0));
+    };
+
+    loadCounts();
 
     const ch = supabase
-      .channel("sidebar-pending")
-      .on("postgres_changes", { event: "*", schema: "public", table: "chat_rooms", filter: `team_b_id=eq.${uid}` }, () => {
-        supabase
-          .from("chat_rooms")
-          .select("id", { count: "exact", head: true })
-          .eq("team_b_id", uid)
-          .eq("status", "pending")
-          .then(({ count }) => setPendingCount(count ?? 0));
-      })
+      .channel("sidebar-counts")
+      .on("postgres_changes", { event: "*", schema: "public", table: "chat_rooms", filter: `team_b_id=eq.${uid}` }, loadCounts)
+      .on("postgres_changes", { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${uid}` }, loadCounts)
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -158,7 +165,8 @@ export default function Sidebar({ active }: { active: string }) {
         <nav style={{ marginTop: 26, display: "flex", flexDirection: "column", gap: 4 }}>
           {LINKS.map((item) => {
             const isActive = active === item.href;
-            const badge = item.href === "/notifications" && pendingCount > 0 ? pendingCount : null;
+            const totalBadge = item.href === "/notifications" ? pendingCount + notifUnread : 0;
+            const badge = totalBadge > 0 ? totalBadge : null;
             return (
               <Link key={item.label} href={item.href} style={{
                 background: isActive ? S.activeBg : "transparent",

@@ -39,6 +39,9 @@ interface AdminUser {
   role: UserRole;
   area: string;
   level: string;
+  gender: string;
+  lineId: string;
+  notes: string;
   registeredAt: string;
   lastLogin: string;
   status: UserStatus;
@@ -102,8 +105,8 @@ function matchStatusColor(s: MatchStatus) {
   return s === "confirmed" ? C.green : s === "negotiating" ? C.accent : C.red;
 }
 function exportCSV(users: AdminUser[]) {
-  const hdr = ["大学名", "地域", "レベル", "登録日", "公開状態", "停止状態"];
-  const rows = users.map((u) => [u.name, u.area, u.level, u.registeredAt, u.is_public ? "公開" : "非公開", u.status === "suspended" ? "停止中" : "有効"]);
+  const hdr = ["大学名", "メール", "地域", "レベル", "男女", "LINE ID", "備考", "登録日", "公開状態", "停止状態"];
+  const rows = users.map((u) => [u.name, u.email, u.area, u.level, u.gender, u.lineId, u.notes, u.registeredAt, u.is_public ? "公開" : "非公開", u.status === "suspended" ? "停止中" : "有効"]);
   const csv = [hdr, ...rows].map((r) => r.join(",")).join("\n");
   const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
@@ -301,14 +304,21 @@ function UserManagement({ users, setUsers }: { users: AdminUser[]; setUsers: Dis
     }
   };
 
+  const [revealedPw, setRevealedPw] = useState<Set<string>>(new Set());
+
   const setStatus = async (id: string, status: UserStatus) => {
     setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, status } : u)));
     await supabase.from("profiles").update({ is_suspended: status === "suspended" }).eq("user_id", id);
   };
 
+  const togglePw = (id: string) =>
+    setRevealedPw((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+
   const filtered = users.filter(
-    (u) => !search || u.name.includes(search) || u.area.includes(search) || u.level.includes(search)
+    (u) => !search || u.name.includes(search) || u.email.includes(search) || u.area.includes(search) || u.level.includes(search)
   );
+
+  const HEADERS = ["大学名", "メール", "地域", "レベル", "男女", "LINE ID", "備考", "登録日", "パスワード", "公開", "状態", "操作"];
 
   return (
     <div>
@@ -320,7 +330,7 @@ function UserManagement({ users, setUsers }: { users: AdminUser[]; setUsers: Dis
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="大学名・地域・レベルで検索"
+              placeholder="大学名・メール・地域で検索"
               style={{ background: "#121829", border: `1px solid ${C.b2}`, borderRadius: 10, padding: "8px 14px", fontSize: 13, color: C.dim, outline: "none", width: 220 }}
             />
             <button
@@ -333,35 +343,51 @@ function UserManagement({ users, setUsers }: { users: AdminUser[]; setUsers: Dis
         }
       />
       <div style={{ background: C.card, border: `1px solid ${C.cardB}`, borderRadius: 14, overflow: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1200 }}>
           <thead>
             <tr style={{ background: "#0D1322" }}>
-              {["大学名", "地域", "レベル", "登録日", "公開状態", "停止状態", "操作"].map((h) => (
-                <th key={h} style={{ padding: "10px 14px", fontSize: 11, color: C.muted, fontWeight: 700, textAlign: "left", borderBottom: `1px solid ${C.border}`, whiteSpace: "nowrap" }}>{h}</th>
+              {HEADERS.map((h) => (
+                <th key={h} style={{ padding: "10px 12px", fontSize: 11, color: C.muted, fontWeight: 700, textAlign: "left", borderBottom: `1px solid ${C.border}`, whiteSpace: "nowrap" as const }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {filtered.map((u) => (
               <tr key={u.id} style={{ borderBottom: `1px solid #141B2E` }}>
-                <td style={{ padding: "11px 14px", fontSize: 13, fontWeight: 700 }}>{u.name}</td>
-                <td style={{ padding: "11px 14px", fontSize: 12, color: C.muted }}>{u.area || "—"}</td>
-                <td style={{ padding: "11px 14px", fontSize: 12, color: C.muted }}>{u.level || "—"}</td>
-                <td style={{ padding: "11px 14px", fontSize: 11, fontFamily: "'Roboto Mono', monospace", color: C.muted, whiteSpace: "nowrap" as const }}>{u.registeredAt}</td>
-                <td style={{ padding: "11px 14px" }}>
+                <td style={{ padding: "10px 12px", fontSize: 13, fontWeight: 700, whiteSpace: "nowrap" as const }}>{u.name}</td>
+                <td style={{ padding: "10px 12px", fontSize: 11, fontFamily: "'Roboto Mono', monospace", color: C.muted, whiteSpace: "nowrap" as const }}>{u.email}</td>
+                <td style={{ padding: "10px 12px", fontSize: 12, color: C.muted }}>{u.area}</td>
+                <td style={{ padding: "10px 12px", fontSize: 12, color: C.muted }}>{u.level}</td>
+                <td style={{ padding: "10px 12px", fontSize: 12, color: C.muted }}>{u.gender}</td>
+                <td style={{ padding: "10px 12px", fontSize: 11, fontFamily: "'Roboto Mono', monospace", color: C.dim }}>{u.lineId}</td>
+                <td style={{ padding: "10px 12px", fontSize: 12, color: C.muted, maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>{u.notes}</td>
+                <td style={{ padding: "10px 12px", fontSize: 11, fontFamily: "'Roboto Mono', monospace", color: C.muted, whiteSpace: "nowrap" as const }}>{u.registeredAt}</td>
+                <td style={{ padding: "10px 12px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 11, fontFamily: "'Roboto Mono', monospace", color: C.muted, letterSpacing: 1 }}>
+                      {revealedPw.has(u.id) ? (u.password === "—" ? "—" : u.password) : "••••••••"}
+                    </span>
+                    {u.password !== "—" && (
+                      <button onClick={() => togglePw(u.id)} style={{ fontSize: 10, color: C.accent, background: "none", border: "none", cursor: "pointer", padding: "2px 4px", fontWeight: 700 }}>
+                        {revealedPw.has(u.id) ? "隠す" : "表示"}
+                      </button>
+                    )}
+                  </div>
+                </td>
+                <td style={{ padding: "10px 12px" }}>
                   <Badge label={u.is_public ? "公開" : "非公開"} color={u.is_public ? C.green : C.muted} />
                 </td>
-                <td style={{ padding: "11px 14px" }}>
+                <td style={{ padding: "10px 12px" }}>
                   <Badge label={u.status === "suspended" ? "停止中" : "有効"} color={u.status === "suspended" ? C.red : C.green} />
                 </td>
-                <td style={{ padding: "11px 14px" }}>
-                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                <td style={{ padding: "10px 12px" }}>
+                  <div style={{ display: "flex", gap: 4, flexWrap: "nowrap" as const }}>
                     {u.status !== "suspended"
                       ? <Btn label="停止" color={C.yellow} onClick={() => { void setStatus(u.id, "suspended"); }} small />
                       : <Btn label="再開" color={C.green}  onClick={() => { void setStatus(u.id, "active"); }}    small />
                     }
                     <Btn
-                      label={impersonating === u.id ? "処理中…" : "代理ログイン"}
+                      label={impersonating === u.id ? "…" : "代理"}
                       color={C.accent}
                       onClick={() => { void handleImpersonate(u.id); }}
                       small
@@ -439,27 +465,32 @@ function ChatMonitor({ rooms, setRooms }: { rooms: ChatRoom[]; setRooms: Dispatc
     const existingRoom = rooms.find((r) => r.id === id);
     if (existingRoom && existingRoom.messages.length > 0) return;
     setLoadingMsgs(true);
-    const { data } = await supabase
-      .from("messages")
-      .select("id, sender_id, content, created_at")
-      .eq("room_id", id)
-      .order("created_at", { ascending: true });
-    setLoadingMsgs(false);
-    if (!data) return;
-    setRooms((prev) =>
-      prev.map((r) =>
-        r.id !== id ? r : {
-          ...r,
-          msgCount: data.length,
-          lastMsg: data[data.length - 1]?.content ?? "",
-          messages: (data as { id: string; sender_id: string; content: string; created_at: string }[]).map((m) => ({
-            from: m.sender_id,
-            text: m.content,
-            time: new Date(m.created_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
-          })),
-        }
-      )
-    );
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/admin/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` },
+        body: JSON.stringify({ room_id: id }),
+      });
+      if (!res.ok) return;
+      const { messages } = await res.json() as { messages: { id: string; sender_id: string; content: string; created_at: string }[] };
+      setRooms((prev) =>
+        prev.map((r) =>
+          r.id !== id ? r : {
+            ...r,
+            msgCount: messages.length,
+            lastMsg: messages[messages.length - 1]?.content ?? "",
+            messages: messages.map((m) => ({
+              from: m.sender_id,
+              text: m.content,
+              time: new Date(m.created_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
+            })),
+          }
+        )
+      );
+    } finally {
+      setLoadingMsgs(false);
+    }
   };
 
   const deleteMsg = (roomId: string, idx: number) =>
@@ -883,29 +914,44 @@ export default function AdminPage() {
     const loadDb = async () => {
       const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-      const [profilesRes, activeRoomsRes, weekRoomsRes, allRoomsRes] = await Promise.all([
-        supabase.from("profiles").select("user_id, university_name, region, level, gender, is_suspended, is_public, created_at"),
+      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = session?.access_token ?? "";
+
+      const [profilesRes, activeRoomsRes, weekRoomsRes, allRoomsRes, adminUsersRes] = await Promise.all([
+        supabase.from("profiles").select("user_id, university_name, region, level, gender, line_id, notes, is_suspended, is_public, created_at"),
         supabase.from("chat_rooms").select("id", { count: "exact", head: true }).eq("status", "active"),
         supabase.from("chat_rooms").select("id", { count: "exact", head: true }).gte("created_at", weekAgo),
         supabase.from("chat_rooms").select("id, team_a_name, team_b_name, status, created_at").order("created_at", { ascending: false }),
+        fetch("/api/admin/users", { headers: { Authorization: `Bearer ${accessToken}` } })
+          .then((r) => r.ok ? r.json() as Promise<{ users: { id: string; email: string; created_at: string; metadata: Record<string, unknown> }[] }> : Promise.resolve({ users: [] }))
+          .catch(() => ({ users: [] })),
       ]);
+
+      type AuthUser = { id: string; email: string; created_at: string; metadata: Record<string, unknown> };
+      const authUserMap = new Map<string, AuthUser>((adminUsersRes.users ?? []).map((u: AuthUser) => [u.id, u]));
 
       const profiles = profilesRes.data ?? [];
       setUsers(
-        profiles.map((p: { user_id: string; university_name: string; region: string; level: string; gender: string; is_suspended: boolean | null; is_public: boolean; created_at: string }) => ({
-          id: p.user_id,
-          name: p.university_name || "—",
-          email: "—",
-          password: "—",
-          role: "university" as UserRole,
-          area: p.region || "—",
-          level: p.level || "—",
-          registeredAt: p.created_at ? new Date(p.created_at).toLocaleDateString("ja-JP") : "—",
-          lastLogin: "—",
-          status: p.is_suspended ? "suspended" as UserStatus : "active" as UserStatus,
-          flagged: false,
-          is_public: p.is_public ?? false,
-        }))
+        profiles.map((p: { user_id: string; university_name: string; region: string; level: string; gender: string; line_id: string; notes: string; is_suspended: boolean | null; is_public: boolean; created_at: string }) => {
+          const au = authUserMap.get(p.user_id);
+          return {
+            id: p.user_id,
+            name: p.university_name || "—",
+            email: au?.email ?? "—",
+            password: (au?.metadata?.password as string) ?? "—",
+            role: "university" as UserRole,
+            area: p.region || "—",
+            level: p.level || "—",
+            gender: p.gender || "—",
+            lineId: p.line_id || "—",
+            notes: p.notes || "—",
+            registeredAt: (au?.created_at ?? p.created_at) ? new Date(au?.created_at ?? p.created_at).toLocaleDateString("ja-JP") : "—",
+            lastLogin: "—",
+            status: p.is_suspended ? "suspended" as UserStatus : "active" as UserStatus,
+            flagged: false,
+            is_public: p.is_public ?? false,
+          };
+        })
       );
 
       setDbStats({
