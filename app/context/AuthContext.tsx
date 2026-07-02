@@ -304,22 +304,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     updates: Partial<Pick<User, 'name' | 'area' | 'level' | 'lineId' | 'notes'>>
   ) => {
     if (!user) return;
-    const { error } = await supabase.auth.updateUser({ data: updates });
-    if (error) throw new Error(error.message);
+
+    // Build the profiles table patch
+    const profilePatch: Record<string, string> = {};
+    if (updates.name   !== undefined) profilePatch.university_name = updates.name;
+    if (updates.area   !== undefined) profilePatch.region          = updates.area;
+    if (updates.level  !== undefined) profilePatch.level           = updates.level;
+    if (updates.lineId !== undefined) profilePatch.line_id         = updates.lineId;
+    if (updates.notes  !== undefined) profilePatch.notes           = updates.notes;
+
+    // Run both updates in parallel; throw on first error
+    const tasks: Promise<{ error: { message: string } | null }>[] = [
+      supabase.auth.updateUser({ data: updates }).then((r) => ({ error: r.error })),
+    ];
+    if (Object.keys(profilePatch).length > 0) {
+      tasks.push(
+        supabase.from('profiles')
+          .upsert({ user_id: user.id, ...profilePatch }, { onConflict: 'user_id' })
+          .then((r) => ({ error: r.error }))
+      );
+    }
+
+    const results = await Promise.all(tasks);
+    const failed = results.find((r) => r.error);
+    if (failed?.error) throw new Error(failed.error.message);
+
     const updated = { ...user, ...updates };
     setUser(updated);
-
-    // Sync to Supabase profiles table
-    const profilePatch: Record<string, string> = {};
-    if (updates.name    !== undefined) profilePatch.university_name = updates.name;
-    if (updates.area    !== undefined) profilePatch.region           = updates.area;
-    if (updates.level   !== undefined) profilePatch.level            = updates.level;
-    if (updates.lineId  !== undefined) profilePatch.line_id          = updates.lineId;
-    if (updates.notes   !== undefined) profilePatch.notes            = updates.notes;
-    if (Object.keys(profilePatch).length > 0) {
-      supabase.from('profiles').upsert({ user_id: user.id, ...profilePatch }, { onConflict: 'user_id' })
-        .then(({ error }) => { if (error) console.error('[profile] sync:', error); });
-    }
 
     // Keep localStorage in sync for admin page
     const users = JSON.parse(localStorage.getItem('users') ?? '[]');

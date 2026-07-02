@@ -601,22 +601,29 @@ function NotificationSender({ users, notifs, setNotifs }: {
     setSendResult(null);
 
     const targetUser = users.find((u) => u.id === target);
-    let error: { message: string } | null = null;
 
-    if (target === "all") {
-      const rows = users.filter((u) => u.role !== "manager").map((u) => ({ user_id: u.id, message: t }));
-      if (rows.length > 0) {
-        const res = await supabase.from("notifications").insert(rows);
-        error = res.error;
+    const rows =
+      target === "all"
+        ? users.filter((u) => u.role !== "manager").map((u) => ({ user_id: u.id, message: t }))
+        : [{ user_id: target, message: t }];
+
+    let sendError: string | null = null;
+    if (rows.length > 0) {
+      const { data: { session } } = await supabase.auth.getSession(); // supabase used only for session token
+      const res = await fetch("/api/admin/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` },
+        body: JSON.stringify({ rows }),
+      });
+      if (!res.ok) {
+        const body = await res.json() as { error?: string };
+        sendError = body.error ?? "送信に失敗しました";
       }
-    } else {
-      const res = await supabase.from("notifications").insert({ user_id: target, message: t });
-      error = res.error;
     }
 
     setSending(false);
-    if (error) {
-      setSendResult({ ok: false, text: `送信失敗: ${error.message}` });
+    if (sendError) {
+      setSendResult({ ok: false, text: `送信失敗: ${sendError}` });
       return;
     }
 

@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import { useAuth } from "@/app/context/AuthContext";
+import { createClient } from "@/lib/supabase/client";
 
 const C = {
   bg: "#0A0F1F",
@@ -59,12 +60,14 @@ function TextInput({ value, onChange, placeholder, disabled, type }: { value: st
 export default function SettingsPage() {
   const router = useRouter();
   const { user, isLoading, updateProfile, changePassword, logout } = useAuth();
+  const supabase = useMemo(() => createClient(), []);
 
   const [name, setName] = useState("");
   const [area, setArea] = useState("");
   const [level, setLevel] = useState("");
   const [lineId, setLineId] = useState("");
   const [notes, setNotes] = useState("");
+  const [isPublic, setIsPublic] = useState(false);
 
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
@@ -86,8 +89,11 @@ export default function SettingsPage() {
       setLevel(user.level || "");
       setLineId(user.lineId || "");
       setNotes(user.notes || "");
+      supabase.from("profiles").select("is_public").eq("user_id", user.id).single()
+        .then(({ data }) => { if (data) setIsPublic(data.is_public ?? false); });
     }
-  }, [user]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const handleProfileSave = async () => {
     if (!name.trim()) {
@@ -98,9 +104,13 @@ export default function SettingsPage() {
     setProfileMsg(null);
     try {
       await updateProfile({ name: name.trim(), area, level, lineId: lineId.trim(), notes: notes.trim() });
+      if (user?.id) {
+        const { error } = await supabase.from("profiles").update({ is_public: isPublic }).eq("user_id", user.id);
+        if (error) throw new Error(error.message);
+      }
       setProfileMsg({ type: "ok", text: "保存しました" });
-    } catch {
-      setProfileMsg({ type: "err", text: "保存に失敗しました。" });
+    } catch (err) {
+      setProfileMsg({ type: "err", text: err instanceof Error ? err.message : "保存に失敗しました。" });
     } finally {
       setSaving(false);
     }
@@ -194,6 +204,39 @@ export default function SettingsPage() {
                   </button>
                 ))}
               </div>
+            </Field>
+
+            <Field label="プロフィールの公開設定">
+              <button
+                type="button"
+                onClick={() => setIsPublic((v) => !v)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 12,
+                  background: isPublic ? "rgba(37,208,125,0.1)" : "rgba(138,148,178,0.08)",
+                  border: `1px solid ${isPublic ? "rgba(37,208,125,0.4)" : C.border2}`,
+                  borderRadius: 12, padding: "12px 16px", cursor: "pointer", width: "100%",
+                }}
+              >
+                <div style={{
+                  width: 40, height: 22, borderRadius: 11,
+                  background: isPublic ? C.green : "#2A3448",
+                  position: "relative", transition: "background 0.2s", flexShrink: 0,
+                }}>
+                  <div style={{
+                    position: "absolute", top: 3, left: isPublic ? 21 : 3,
+                    width: 16, height: 16, borderRadius: "50%", background: "#fff",
+                    transition: "left 0.2s",
+                  }} />
+                </div>
+                <div style={{ textAlign: "left" }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: isPublic ? C.green : C.muted }}>
+                    {isPublic ? "公開中 — 「探す」ページに表示されています" : "非公開 — 「探す」ページに表示されません"}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#5A647F", marginTop: 2 }}>
+                    公開にすると他チームからマッチング申請を受け取れます
+                  </div>
+                </div>
+              </button>
             </Field>
 
             <Field label="LINE ID">
